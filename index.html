@@ -205,6 +205,22 @@ a.req { color: var(--ink); text-decoration: none; border-bottom: 1px dotted var(
 a.req:hover { color: var(--accent); border-bottom-color: var(--accent); }
 a.req.soft { color: var(--muted); }
 .req.gone { color: var(--muted); font-style: italic; text-decoration: line-through; }
+
+/* Library */
+.add-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.in-cols { display: flex; flex-wrap: wrap; gap: 3px 12px; align-items: center; }
+.note.local { color: var(--ink); }
+.note.local .req-label { margin-right: 6px; }
+.lp-list { max-height: 52dvh; overflow-y: auto; display: grid; border: 1px solid var(--line); border-radius: 6px; }
+.lp-item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; padding: 8px 10px; border-top: 1px solid var(--line); align-items: start; cursor: pointer; }
+.lp-item:first-child { border-top: 0; }
+.lp-item:hover { background: var(--sunk); }
+.lp-item input { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--accent); }
+.lp-item.here { opacity: .55; cursor: default; }
+.lp-item.here:hover { background: transparent; }
+.lp-t { font-weight: 700; overflow-wrap: anywhere; }
+.lp-s { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
+.lp-empty { padding: 14px; color: var(--muted); font-size: .9rem; }
 .filters .sep { flex: 1 1 auto; }
 
 .tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -386,6 +402,19 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   </div>
 </dialog>
 
+<dialog id="libDialog">
+  <div class="dlg">
+    <h3 id="lpTitle">Add from Library</h3>
+    <input class="field" id="lpSearch" type="search" placeholder="Search by name, author or tag" aria-label="Search the Library" autocomplete="off">
+    <div class="lp-list" id="lpList"></div>
+    <div class="dlg-foot" style="align-items:center">
+      <span class="hint" id="lpCount" style="margin-right:auto"></span>
+      <button class="btn" type="button" id="lpCancel">Cancel</button>
+      <button class="btn primary" type="button" id="lpAdd" disabled>Add</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="setDialog">
   <div class="dlg">
     <h3>Settings</h3>
@@ -460,12 +489,20 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     return legacy ? { type: "col", id: legacy } : { type: "home" };
   }
 
+  /*
+   * Data model
+   *   games:       { id, name, image, tags[], createdAt }
+   *   mods:        { id, scope, url, title, author, tags[], requires[{id,name}], note, addedAt }
+   *                scope = a game id (that game's Library), or "col:<collection id>" for a collection without a game
+   *   collections: { id, name, gameId, description, iconSvg, color, items[{ modId, note, addedAt }], createdAt, updatedAt }
+   *   looseTags:   tags shared by collections without a game
+   */
   const state = {
     connected: false,
-    games: [], collections: [], looseTags: [], settings: { myAuthor: "" },
+    games: [], mods: [], collections: [], looseTags: [], settings: { myAuthor: "" },
     view: readView(),
     filter: "", sort: "new", tagFilter: new Set(), mineOnly: false, authorFilter: "",
-    editingLinkId: null, deleteArmed: false, gameDeleteArmed: false,
+    editingModId: null, deleteArmed: false, gameDeleteArmed: false, modDeleteArmed: null, libFormOpen: false,
     dialogMode: null, dialogIcon: "",
     quick: null,
   };
@@ -491,18 +528,25 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
     return el;
   }
+  const arr = (x) => (Array.isArray(x) ? x : []);
   const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
   const getCol = (id) => state.collections.find((c) => c.id === id);
   const getGame = (id) => state.games.find((g) => g.id === id);
+  const getMod = (id) => state.mods.find((m) => m.id === id);
   const gameOf = (col) => (col && col.gameId ? getGame(col.gameId) : null) || null;
-  const gidOf = (col) => (gameOf(col) ? col.gameId : null);
+  const scopeOfCol = (col) => (gameOf(col) ? col.gameId : "col:" + col.id);
+  const isColScope = (s) => typeof s === "string" && s.startsWith("col:");
+  const tagGid = (scope) => (scope && !isColScope(scope) && getGame(scope) ? scope : null);
+  const modsIn = (scope) => state.mods.filter((m) => m.scope === scope);
   const colsOf = (gameId) => state.collections.filter((c) => gameId === NO_GAME || gameId == null ? !gameOf(c) : c.gameId === gameId);
+  const entriesOf = (col) => col.items.map((it) => ({ it, m: getMod(it.modId) })).filter((x) => x.m);
   const sortedGames = () => state.games.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-  const linkCount = (cols) => cols.reduce((n, c) => n + (c.links || []).length, 0);
   const fmtDate = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); } catch (e) { return ""; } };
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const initial = (s) => ((s || "?").trim().charAt(0).toUpperCase() || "?");
   const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  const linkLabel = (m) => m.title || m.url;
+  const byLabel = (a, b) => linkLabel(a).localeCompare(linkLabel(b), undefined, { sensitivity: "base" });
 
   function normUrl(raw) {
     let s = (raw || "").trim();
@@ -578,12 +622,12 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (o.remove) el.append(h("button", { class: "x", type: "button", "aria-label": "Remove tag " + t.name, onclick: (e) => { e.preventDefault(); e.stopPropagation(); o.remove(); } }, "×"));
     return el;
   }
-  // Move tag ids from one game's list to another's, matching by name and creating missing tags.
+  // Move tag ids from one tag list to another, matching by name and creating missing tags.
   function remapTags(ids, fromGid, toGid) {
-    if ((fromGid || null) === (toGid || null)) return (ids || []).slice();
+    if ((fromGid || null) === (toGid || null)) return arr(ids).slice();
     const from = tagList(fromGid), to = tagList(toGid);
     const out = [];
-    for (const id of ids || []) {
+    for (const id of arr(ids)) {
       const t = from.find((x) => x.id === id);
       if (!t) continue;
       let m = to.find((x) => x.name.toLowerCase() === t.name.toLowerCase());
@@ -592,15 +636,11 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     }
     return out;
   }
-  function tagUses(gid, tagId) {
-    let n = 0;
-    for (const c of colsOf(gid || NO_GAME)) for (const l of c.links || []) if ((l.tags || []).includes(tagId)) n++;
-    return n;
-  }
+  const modsUsingTags = (gid) => state.mods.filter((m) => tagGid(m.scope) === (gid || null));
+  const tagUses = (gid, tagId) => modsUsingTags(gid).filter((m) => m.tags.includes(tagId)).length;
 
-  /* Tag editor used in the add, edit and quick-add forms. New tags are only saved when the form is. */
   function tagEditor(gid, initialIds, idPrefix) {
-    const selected = (initialIds || []).filter((id) => tagById(gid, id));
+    const selected = arr(initialIds).filter((id) => tagById(gid, id));
     const pending = [];
     const listId = idPrefix + "-dl";
     const dl = h("datalist", { id: listId });
@@ -630,7 +670,6 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       else if (e.key === "Backspace" && !input.value && selected.length) { selected.pop(); draw(); input.focus(); }
     });
     input.addEventListener("input", (e) => {
-      // Picking a suggestion from the dropdown adds it straight away (typing doesn't).
       const picked = !e.inputType || e.inputType === "insertReplacementText";
       if (picked && tagList(gid).some((t) => t.name === input.value)) add(input.value, true);
     });
@@ -650,41 +689,44 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     };
   }
 
-  /* ===== requires: links point at other links in the same game ===== */
+  /* ===== per-scope index: mods by id, who needs what, which collections hold each mod ===== */
   const idxCache = new Map();
-  function gameIndex(gid) {
-    const key = gid || NO_GAME;
+  function scopeIndex(scope) {
+    const key = scope || "∅";
     if (idxCache.has(key)) return idxCache.get(key);
-    const byId = new Map(), neededBy = new Map();
-    for (const c of colsOf(key)) for (const l of c.links || []) byId.set(l.id, { l, c });
-    for (const { l } of byId.values()) for (const r of l.requires || []) {
-      if (!byId.has(r.id) || r.id === l.id) continue;
+    const byId = new Map(), neededBy = new Map(), inCols = new Map();
+    for (const m of state.mods) if (m.scope === scope) byId.set(m.id, m);
+    for (const m of byId.values()) for (const r of m.requires) {
+      if (!byId.has(r.id) || r.id === m.id) continue;
       if (!neededBy.has(r.id)) neededBy.set(r.id, []);
-      if (!neededBy.get(r.id).includes(l.id)) neededBy.get(r.id).push(l.id);
+      if (!neededBy.get(r.id).includes(m.id)) neededBy.get(r.id).push(m.id);
     }
-    const v = { byId, neededBy };
+    for (const c of state.collections) for (const it of c.items) if (byId.has(it.modId)) {
+      if (!inCols.has(it.modId)) inCols.set(it.modId, []);
+      if (!inCols.get(it.modId).includes(c)) inCols.get(it.modId).push(c);
+    }
+    const v = { byId, neededBy, inCols };
     idxCache.set(key, v);
     return v;
   }
-  const linkLabel = (l) => l.title || l.url;
+  const whereLabel = (idx, m) => { const cs = idx.inCols.get(m.id) || []; return cs.length ? cs.map((c) => c.name).join(", ") : "Library only"; };
 
-  /* Picker: type part of a mod's name; a list of that game's mods appears to choose from. */
-  function requiresEditor(gid, selfId, initial, idPrefix) {
-    const items = (initial || []).map((r) => ({ ...r }));
+  /* Requires picker: type part of a mod's name; mods from the same Library appear to choose from. */
+  function requiresEditor(scope, selfId, initial, idPrefix) {
+    const items = arr(initial).map((r) => ({ ...r }));
     let matches = [], active = 0;
     const input = h("input", { id: idPrefix, placeholder: "Requires… type a mod name", "aria-label": "Requires", autocomplete: "off", maxlength: "200",
       role: "combobox", "aria-autocomplete": "list", "aria-expanded": "false" });
     const box = h("div", { class: "tag-editor", onclick: (e) => { if (e.target === box) input.focus(); } });
     const pop = h("div", { class: "req-pop", role: "listbox", hidden: true });
     const wrap = h("div", { class: "req-editor" }, box, pop);
-    const hitOf = (r) => { const x = gameIndex(gid).byId.get(r.id); return x && x.l.id !== selfId ? x : null; };
+    const hitOf = (r) => { const m = scopeIndex(scope).byId.get(r.id); return m && m.id !== selfId ? m : null; };
     function draw() {
       box.replaceChildren(...items.map((r, i) => {
         const hit = hitOf(r);
-        const chip = h("span", { class: "tag req-chip" + (hit ? "" : " gone"), title: hit ? `In ${hit.c.name}` : "No longer in this game's ledger" },
-          hit ? linkLabel(hit.l) : r.name,
+        return h("span", { class: "tag req-chip" + (hit ? "" : " gone"), title: hit ? "" : "No longer in this Library" },
+          hit ? linkLabel(hit) : r.name,
           h("button", { class: "x", type: "button", "aria-label": "Remove requirement", onclick: (e) => { e.preventDefault(); e.stopPropagation(); items.splice(i, 1); draw(); input.focus(); } }, "×"));
-        return chip;
       }), input);
     }
     function close() { pop.hidden = true; input.setAttribute("aria-expanded", "false"); matches = []; }
@@ -692,27 +734,26 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       const q = input.value.trim().toLowerCase();
       if (!q) { close(); return; }
       const taken = new Set(items.map((r) => r.id));
-      matches = [...gameIndex(gid).byId.values()]
-        .filter(({ l }) => l.id !== selfId && !taken.has(l.id) && [l.title, l.author, l.url].some((s) => (s || "").toLowerCase().includes(q)))
-        .sort((a, b) => {
-          const as = (a.l.title || "").toLowerCase().startsWith(q), bs = (b.l.title || "").toLowerCase().startsWith(q);
-          return (bs - as) || linkLabel(a.l).localeCompare(linkLabel(b.l), undefined, { sensitivity: "base" });
-        }).slice(0, 8);
+      matches = [...scopeIndex(scope).byId.values()]
+        .filter((m) => m.id !== selfId && !taken.has(m.id) && [m.title, m.author, m.url].some((s) => (s || "").toLowerCase().includes(q)))
+        .sort((a, b) => ((b.title || "").toLowerCase().startsWith(q) - (a.title || "").toLowerCase().startsWith(q)) || byLabel(a, b))
+        .slice(0, 8);
       active = 0;
       drawPop();
     }
     function drawPop() {
-      const g = gid ? getGame(gid) : null;
+      const idx = scopeIndex(scope);
+      const g = tagGid(scope) ? getGame(scope) : null;
       pop.replaceChildren(...(matches.length
         ? matches.map((m, i) => h("button", { type: "button", class: "req-opt" + (i === active ? " on" : ""), role: "option", "aria-selected": String(i === active),
             onmousedown: (e) => e.preventDefault(), onclick: () => pick(m) },
-            h("span", { class: "ro-t", text: linkLabel(m.l) }),
-            h("span", { class: "ro-c", text: m.c.name + (m.l.author ? " · by " + m.l.author : "") })))
-        : [h("div", { class: "req-empty", text: `No saved mods in ${g ? g.name : "this group"} match “${input.value.trim()}”. Add that mod to a collection first.` })]));
+            h("span", { class: "ro-t", text: linkLabel(m) }),
+            h("span", { class: "ro-c", text: whereLabel(idx, m) + (m.author ? " · by " + m.author : "") })))
+        : [h("div", { class: "req-empty", text: `Nothing in ${g ? "the " + g.name + " Library" : "this collection"} matches “${input.value.trim()}”. Add that mod first.` })]));
       pop.hidden = false;
       input.setAttribute("aria-expanded", "true");
     }
-    function pick(m) { items.push({ id: m.l.id, name: linkLabel(m.l) }); input.value = ""; close(); draw(); input.focus(); }
+    function pick(m) { items.push({ id: m.id, name: linkLabel(m) }); input.value = ""; close(); draw(); input.focus(); }
     input.addEventListener("input", search);
     input.addEventListener("focus", () => { if (input.value.trim()) search(); });
     input.addEventListener("keydown", (e) => {
@@ -726,40 +767,39 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     draw();
     return {
       el: wrap,
-      get() { return items.map((r) => { const hit = hitOf(r); return { id: r.id, name: (hit ? linkLabel(hit.l) : r.name).slice(0, 200) }; }); },
+      get() { return items.map((r) => { const hit = hitOf(r); return { id: r.id, name: (hit ? linkLabel(hit) : r.name).slice(0, 200) }; }); },
       reset() { items.length = 0; input.value = ""; close(); draw(); },
     };
   }
 
   /* ===== authors ===== */
   const myNames = () => (state.settings.myAuthor || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-  const isMine = (l) => !!(l.author && myNames().includes(l.author.trim().toLowerCase()));
+  const isMine = (m) => !!(m.author && myNames().includes(m.author.trim().toLowerCase()));
 
   /* ===== filters ===== */
   function clearFilters() { state.filter = ""; state.tagFilter = new Set(); state.mineOnly = false; state.authorFilter = ""; }
   const filtersActive = () => !!(state.filter.trim() || state.mineOnly || state.authorFilter || state.tagFilter.size);
-  function linkMatches(l, gid) {
-    if (state.mineOnly && !isMine(l)) return false;
-    if (state.authorFilter && (l.author || "").trim().toLowerCase() !== state.authorFilter.toLowerCase()) return false;
-    for (const t of state.tagFilter) if (!(l.tags || []).includes(t)) return false;
+  function modMatches(m, gid, extraText) {
+    if (state.mineOnly && !isMine(m)) return false;
+    if (state.authorFilter && (m.author || "").trim().toLowerCase() !== state.authorFilter.toLowerCase()) return false;
+    for (const t of state.tagFilter) if (!m.tags.includes(t)) return false;
     const q = state.filter.trim().toLowerCase();
     if (q) {
-      const names = (l.tags || []).map((id) => (tagById(gid, id) || {}).name || "");
-      const reqNames = (l.requires || []).map((r) => r.name);
-      if (![l.title, l.url, l.note, l.author, ...names, ...reqNames].some((s) => (s || "").toLowerCase().includes(q))) return false;
+      const names = m.tags.map((id) => (tagById(gid, id) || {}).name || "");
+      if (![m.title, m.url, m.note, m.author, extraText, ...names, ...m.requires.map((r) => r.name)].some((s) => (s || "").toLowerCase().includes(q))) return false;
     }
     return true;
   }
-  function filterBar(gid, links, rerender) {
+  function filterBar(gid, mods, rerender) {
     const counts = new Map();
-    for (const l of links) for (const id of l.tags || []) counts.set(id, (counts.get(id) || 0) + 1);
+    for (const m of mods) for (const id of m.tags) counts.set(id, (counts.get(id) || 0) + 1);
     const tags = tagList(gid).filter((t) => counts.has(t.id) || state.tagFilter.has(t.id)).sort(byName);
     const items = [];
     if (myNames().length) {
       items.push(h("button", { class: "btn sm toggle", type: "button", "aria-pressed": String(state.mineOnly), onclick: () => { state.mineOnly = !state.mineOnly; rerender(); } },
-        `Mine · ${links.filter(isMine).length}`));
+        `Mine · ${mods.filter(isMine).length}`));
     }
-    for (const t of tags) items.push(tagChip(t, { pressed: state.tagFilter.has(t.id), count: counts.get(t.id) || 0, title: "Show only links tagged " + t.name,
+    for (const t of tags) items.push(tagChip(t, { pressed: state.tagFilter.has(t.id), count: counts.get(t.id) || 0, title: "Show only mods tagged " + t.name,
       onclick: () => { state.tagFilter.has(t.id) ? state.tagFilter.delete(t.id) : state.tagFilter.add(t.id); rerender(); } }));
     if (state.authorFilter) {
       const a = h("span", { class: "tag" }, "by " + state.authorFilter, h("button", { class: "x", type: "button", "aria-label": "Clear author filter", onclick: () => { state.authorFilter = ""; rerender(); } }, "×"));
@@ -770,6 +810,23 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (filtersActive()) items.push(h("button", { class: "btn ghost sm", type: "button", onclick: () => { clearFilters(); rerender(true); } }, "Clear filters"));
     items.push(h("button", { class: "btn ghost sm", type: "button", onclick: () => openTagManager(gid) }, "Manage tags"));
     return h("div", { class: "filters" }, items);
+  }
+  function sortSelect(id, onchange) {
+    const s = h("select", { class: "field", id, "aria-label": "Sort" },
+      h("option", { value: "new" }, "Newest first"), h("option", { value: "old" }, "Oldest first"),
+      h("option", { value: "az" }, "Title A–Z"), h("option", { value: "author" }, "By author"), h("option", { value: "site" }, "By site"));
+    s.value = state.sort;
+    s.addEventListener("change", () => { state.sort = s.value; onchange(); });
+    return s;
+  }
+  function sorter(dateOf) {
+    return {
+      new: (a, b) => dateOf(b) - dateOf(a),
+      old: (a, b) => dateOf(a) - dateOf(b),
+      az: (a, b) => byLabel(a.m || a, b.m || b),
+      author: (a, b) => { const x = a.m || a, y = b.m || b; return (!x.author - !y.author) || (x.author || "").localeCompare(y.author || "", undefined, { sensitivity: "base" }) || byLabel(x, y); },
+      site: (a, b) => { const x = a.m || a, y = b.m || b; return siteOf(x.url).localeCompare(siteOf(y.url)) || byLabel(x, y); },
+    }[state.sort];
   }
 
   /* ===== toast ===== */
@@ -848,41 +905,67 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
 
   function serialize() {
-    return JSON.stringify({ app: "loot-ledger", version: 3, settings: state.settings, games: state.games, looseTags: state.looseTags, collections: state.collections }, null, 2) + "\n";
+    return JSON.stringify({ app: "loot-ledger", version: 4, settings: state.settings, games: state.games, looseTags: state.looseTags,
+      mods: state.mods, collections: state.collections }, null, 2) + "\n";
   }
-  // A requirement points at another link in the same game by id; the name is kept as a fallback label.
-  const normReq = (arr) => (Array.isArray(arr) ? arr : []).filter((r) => r && r.id && typeof r.name === "string")
-    .map((r) => ({ id: String(r.id), name: r.name.slice(0, 200) }));
-  const normTags = (arr) => (Array.isArray(arr) ? arr : []).filter((t) => t && t.id && typeof t.name === "string" && t.name.trim())
+  const normReq = (a) => arr(a).filter((r) => r && r.id && typeof r.name === "string").map((r) => ({ id: String(r.id), name: r.name.slice(0, 200) }));
+  const normTags = (a) => arr(a).filter((t) => t && t.id && typeof t.name === "string" && t.name.trim())
     .map((t) => ({ id: String(t.id), name: t.name.trim().slice(0, 40), color: TAG_COLORS.includes(t.color) ? t.color : "slate" }));
-  function applyData(data) {
-    state.settings = { myAuthor: String((data && data.settings && data.settings.myAuthor) || "") };
-    state.looseTags = normTags(data && data.looseTags);
-    const games = Array.isArray(data && data.games) ? data.games : [];
-    state.games = games.filter((g) => g && g.id && typeof g.name === "string").map((g) => ({
+  const dedupeItems = (items) => { const seen = new Set(); return items.filter((i) => i.modId && !seen.has(i.modId) && seen.add(i.modId)); };
+
+  // Reads any saved format. Older files (links stored inside collections) are converted:
+  // each link becomes a Library mod, and the same address saved twice in one game becomes one mod.
+  function normalizeData(data) {
+    const out = { settings: { myAuthor: String((data && data.settings && data.settings.myAuthor) || "") }, looseTags: normTags(data && data.looseTags), games: [], mods: [], collections: [] };
+    out.games = arr(data && data.games).filter((g) => g && g.id && typeof g.name === "string").map((g) => ({
       id: String(g.id), name: g.name,
       image: g.image && typeof g.image.path === "string" ? { path: g.image.path, sha: String(g.image.sha || "") } : null,
-      tags: normTags(g.tags),
-      createdAt: Number(g.createdAt) || 0,
+      tags: normTags(g.tags), createdAt: Number(g.createdAt) || 0,
     }));
-    const cols = Array.isArray(data && data.collections) ? data.collections : [];
-    state.collections = cols.filter((c) => c && c.id && typeof c.name === "string").map((c) => ({
-      id: String(c.id), name: c.name, gameId: c.gameId ? String(c.gameId) : null,
-      description: c.description || "", iconSvg: c.iconSvg || "",
-      color: COLORS.includes(c.color) ? c.color : "slate",
-      links: (Array.isArray(c.links) ? c.links : []).filter((l) => l && normUrl(l.url)).map((l) => ({
-        id: String(l.id || newId()), url: normUrl(l.url), title: l.title || "", author: String(l.author || ""),
-        tags: Array.isArray(l.tags) ? l.tags.map(String) : [], requires: normReq(l.requires), note: l.note || "", addedAt: Number(l.addedAt) || 0,
-      })),
-      createdAt: Number(c.createdAt) || 0, updatedAt: Number(c.updatedAt) || 0,
-    }));
+    const gameIds = new Set(out.games.map((g) => g.id));
+    const normMod = (l, scope) => ({ id: String(l.id || newId()), scope, url: normUrl(l.url), title: String(l.title || "").slice(0, 200), author: String(l.author || "").slice(0, 80),
+      tags: arr(l.tags).map(String), requires: normReq(l.requires), note: String(l.note || "").slice(0, 600), addedAt: Number(l.addedAt) || 0 });
+    out.mods = arr(data && data.mods).filter((m) => m && m.id && typeof m.scope === "string" && normUrl(m.url)).map((m) => normMod(m, String(m.scope)));
+    const dup = new Map();
+    for (const c of arr(data && data.collections)) {
+      if (!c || !c.id || typeof c.name !== "string") continue;
+      const col = { id: String(c.id), name: c.name, gameId: c.gameId && gameIds.has(String(c.gameId)) ? String(c.gameId) : null,
+        description: String(c.description || ""), iconSvg: String(c.iconSvg || ""), color: COLORS.includes(c.color) ? c.color : "slate",
+        items: [], createdAt: Number(c.createdAt) || 0, updatedAt: Number(c.updatedAt) || 0 };
+      const scope = col.gameId || "col:" + col.id;
+      if (Array.isArray(c.items)) {
+        col.items = dedupeItems(c.items.filter((i) => i && i.modId).map((i) => ({ modId: String(i.modId), note: String(i.note || "").slice(0, 600), addedAt: Number(i.addedAt) || 0 })));
+      } else for (const l of arr(c.links)) {
+        const url = l && normUrl(l.url);
+        if (!url) continue;
+        let m = out.mods.find((x) => x.scope === scope && x.url === url), itemNote = "";
+        if (!m) {
+          m = normMod(l, scope);
+          if (out.mods.some((x) => x.id === m.id)) m.id = newId();
+          out.mods.push(m);
+        } else {
+          if (l.id) dup.set(String(l.id), m.id);
+          for (const t of arr(l.tags).map(String)) if (!m.tags.includes(t)) m.tags.push(t);
+          for (const r of normReq(l.requires)) if (!m.requires.some((x) => x.id === r.id)) m.requires.push(r);
+          if (!m.author && l.author) m.author = String(l.author);
+          if (l.note && l.note !== m.note) { if (!m.note) m.note = String(l.note); else itemNote = String(l.note); }
+        }
+        if (!col.items.some((i) => i.modId === m.id)) col.items.push({ modId: m.id, note: itemNote, addedAt: Number(l.addedAt) || 0 });
+      }
+      out.collections.push(col);
+    }
+    if (dup.size) for (const m of out.mods) m.requires = m.requires.map((r) => (dup.has(r.id) ? { id: dup.get(r.id), name: r.name } : r));
+    return out;
   }
+  function applyData(data) { Object.assign(state, normalizeData(data)); idxCache.clear(); }
   async function load() {
     const f = await readFile();
     sha = f ? f.sha : null;
     applyData(f ? f.data : null);
     lastFetch = Date.now();
   }
+  const snapshot = () => JSON.parse(serialize());
+  function restore(snap, action) { applyData(snap); panelBuiltFor = null; markDirty(action); render(); }
 
   /* ----- game pictures: stored as files under images/ in the data repo ----- */
   const imgCache = new Map();
@@ -953,6 +1036,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (s === "error") el.append(" · ", h("button", { type: "button", onclick: () => flush() }, "Retry"));
   }
   function markDirty(action) {
+    idxCache.clear();
     lastAction = action || "Update collections";
     dirty = true;
     setStatus("pending");
@@ -1000,28 +1084,110 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
   window.addEventListener("beforeunload", (ev) => { if (dirty || saving) { ev.preventDefault(); ev.returnValue = ""; } });
 
-  const anyDialogOpen = () => ["colDialog", "gameDialog", "tagDialog", "setDialog"].some((id) => $(id).open);
+  const anyDialogOpen = () => ["colDialog", "gameDialog", "tagDialog", "setDialog", "libDialog"].some((id) => $(id).open);
   async function refreshIfIdle() {
-    if (!state.connected || dirty || saving || state.editingLinkId || anyDialogOpen() || Date.now() - lastFetch < 15000) return;
+    if (!state.connected || dirty || saving || state.editingModId || anyDialogOpen() || Date.now() - lastFetch < 15000) return;
     try {
       const f = await readFile();
       lastFetch = Date.now();
-      if (dirty || saving || anyDialogOpen()) return;
+      if (dirty || saving || anyDialogOpen() || state.editingModId) return;
       if ((f ? f.sha : null) !== sha) { sha = f ? f.sha : null; applyData(f ? f.data : null); panelBuiltFor = null; render(); toast("Loaded changes from another computer"); }
     } catch (e) {}
   }
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfIdle(); });
   window.addEventListener("focus", refreshIfIdle);
 
-  function mutateLinks(colId, mut, action) {
-    const c = getCol(colId);
-    if (!c) return;
-    const links = (c.links || []).map((l) => ({ ...l, tags: (l.tags || []).slice() }));
-    mut(links);
-    c.links = links;
+  /* ===== mod operations ===== */
+  // Add a mod to a Library (scope). If that address is already there, reuse it. Optionally put it in a collection.
+  function addMod(scope, f, colId) {
+    let m = state.mods.find((x) => x.scope === scope && x.url === f.url);
+    const reused = !!m;
+    if (!m) {
+      m = { id: newId(), scope, url: f.url, title: f.title, author: f.author || "", tags: arr(f.tags).slice(), requires: arr(f.requires).slice(), note: f.note || "", addedAt: Date.now() };
+      state.mods.push(m);
+    } else {
+      for (const t of arr(f.tags)) if (!m.tags.includes(t)) m.tags.push(t);
+      for (const r of arr(f.requires)) if (!m.requires.some((x) => x.id === r.id)) m.requires.push(r);
+      if (!m.author && f.author) m.author = f.author;
+      if (!m.note && f.note) m.note = f.note;
+    }
+    let alreadyHere = false;
+    const c = colId ? getCol(colId) : null;
+    if (c) {
+      if (c.items.some((i) => i.modId === m.id)) alreadyHere = true;
+      else { c.items.push({ modId: m.id, note: "", addedAt: Date.now() }); c.updatedAt = Date.now(); }
+    }
+    return { m, reused, alreadyHere };
+  }
+  function addItemTo(colId, modId) {
+    const c = getCol(colId), m = getMod(modId);
+    if (!c || !m || c.items.some((i) => i.modId === modId)) return;
+    c.items.push({ modId, note: "", addedAt: Date.now() });
     c.updatedAt = Date.now();
+    markDirty(`Add ${linkLabel(m)} to ${c.name}`);
     render();
-    markDirty(action);
+    toast(`Added to ${c.name}`);
+  }
+  function removeItem(colId, modId) {
+    const c = getCol(colId), m = getMod(modId);
+    if (!c) return;
+    const i = c.items.findIndex((x) => x.modId === modId);
+    if (i < 0) return;
+    const it = c.items[i];
+    c.items.splice(i, 1);
+    c.updatedAt = Date.now();
+    markDirty(`Remove ${m ? linkLabel(m) : "mod"} from ${c.name}`);
+    render();
+    const inLib = m && !isColScope(m.scope);
+    toast(inLib ? "Removed from this collection. It's still in the Library." : "Removed from this collection", () => {
+      const live = getCol(colId);
+      if (!live || live.items.some((x) => x.modId === modId)) return;
+      live.items.splice(Math.min(i, live.items.length), 0, it);
+      markDirty(`Restore ${m ? linkLabel(m) : "mod"} in ${live.name}`);
+      render();
+    });
+    // A mod that only lived in this (gameless) collection would be orphaned; keep it until the undo window passes.
+    if (m && isColScope(m.scope)) setTimeout(() => {
+      const live = getCol(colId);
+      if (!live || !live.items.some((x) => x.modId === modId)) { state.mods = state.mods.filter((x) => x.id !== modId); markDirty(`Delete ${linkLabel(m)}`); }
+    }, 7000);
+  }
+  function deleteMod(modId) {
+    const m = getMod(modId);
+    if (!m) return;
+    const snap = snapshot();
+    state.mods = state.mods.filter((x) => x.id !== modId);
+    for (const c of state.collections) c.items = c.items.filter((i) => i.modId !== modId);
+    state.modDeleteArmed = null;
+    markDirty(`Delete ${linkLabel(m)}`);
+    render();
+    toast(`Deleted ${linkLabel(m)}`, () => restore(snap, `Restore ${linkLabel(m)}`));
+  }
+  // Copy mods into another Library (or a gameless collection), reusing any with the same address there.
+  function copyModsToScope(modIds, fromScope, toScope) {
+    const map = new Map(), created = [];
+    const fromG = tagGid(fromScope), toG = tagGid(toScope);
+    for (const id of modIds) {
+      const m = getMod(id);
+      if (!m || map.has(id)) continue;
+      const ex = state.mods.find((t) => t.scope === toScope && t.url === m.url);
+      if (ex) { map.set(id, ex.id); continue; }
+      const nm = { ...m, id: newId(), scope: toScope, tags: remapTags(m.tags, fromG, toG), requires: m.requires.map((r) => ({ ...r })) };
+      state.mods.push(nm); created.push(nm); map.set(id, nm.id);
+    }
+    for (const nm of created) nm.requires = nm.requires.map((r) => {
+      if (map.has(r.id)) return { id: map.get(r.id), name: r.name };
+      const src = getMod(r.id);
+      const ex = src && state.mods.find((t) => t.scope === toScope && t.url === src.url);
+      return ex ? { id: ex.id, name: r.name } : r;
+    });
+    return map;
+  }
+  function moveCollectionScope(c, fromScope, toScope) {
+    if (fromScope === toScope) return;
+    const map = copyModsToScope(c.items.map((i) => i.modId), fromScope, toScope);
+    c.items = dedupeItems(c.items.map((i) => ({ ...i, modId: map.get(i.modId) || i.modId })));
+    if (isColScope(fromScope)) state.mods = state.mods.filter((m) => m.scope !== fromScope);
   }
 
   /* ===== connect screen ===== */
@@ -1086,7 +1252,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   /* ===== navigation ===== */
   function go(view) {
     const same = state.view.type === view.type && state.view.id === view.id;
-    if (!same) { clearFilters(); state.editingLinkId = null; state.deleteArmed = false; state.gameDeleteArmed = false; panelBuiltFor = null; }
+    if (!same) { clearFilters(); state.editingModId = null; state.deleteArmed = false; state.gameDeleteArmed = false; state.modDeleteArmed = null; state.libFormOpen = false; panelBuiltFor = null; }
     state.view = view;
     store.set("ll.view", JSON.stringify(view));
     render();
@@ -1096,21 +1262,20 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   $("mineBtn").addEventListener("click", () => go({ type: "mine" }));
 
   /* ===== shelf ===== */
-  function allMineCount() { let n = 0; for (const c of state.collections) for (const l of c.links || []) if (isMine(l)) n++; return n; }
   function renderShelf() {
     $("homeBtn").setAttribute("aria-current", state.view.type === "home" ? "true" : "false");
     $("gameCount").textContent = state.games.length ? String(state.games.length) : "";
     $("mineBtn").hidden = !myNames().length;
     $("mineBtn").setAttribute("aria-current", state.view.type === "mine" ? "true" : "false");
-    $("mineCount").textContent = String(allMineCount());
+    $("mineCount").textContent = String(state.mods.filter(isMine).length);
     const colItem = (c) => h("li", { class: "col-item" },
       h("button", { type: "button", "aria-current": state.view.type === "col" && state.view.id === c.id ? "true" : "false", onclick: () => go({ type: "col", id: c.id }) },
-        tile(c, "sm"), h("span", { class: "nm", text: c.name || "Untitled" }), h("span", { class: "ct", text: String((c.links || []).length) })));
+        tile(c, "sm"), h("span", { class: "nm", text: c.name || "Untitled" }), h("span", { class: "ct", text: String(c.items.length) })));
     const groups = sortedGames().map((g) => {
       const cols = colsOf(g.id);
       return h("div", { class: "group" },
         h("button", { class: "group-head", type: "button", "aria-current": state.view.type === "game" && state.view.id === g.id ? "true" : "false", onclick: () => go({ type: "game", id: g.id }) },
-          gameArt(g, "thumb"), h("span", { class: "gn", text: g.name }), h("span", { class: "ct", text: String(cols.length) })),
+          gameArt(g, "thumb"), h("span", { class: "gn", text: g.name }), h("span", { class: "ct", text: String(modsIn(g.id).length), title: "Mods in Library" })),
         cols.length ? h("ul", { class: "col-list" }, cols.map(colItem)) : null);
     });
     const loose = colsOf(NO_GAME);
@@ -1144,7 +1309,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       gameArt(g),
       h("div", { class: "body" },
         h("div", { class: "gname", text: g.name }),
-        h("div", { class: "gmeta", text: `${plural(cols.length, "collection")} · ${plural(linkCount(cols), "link")}` })));
+        h("div", { class: "gmeta", text: `${plural(modsIn(g.id).length, "mod")} · ${plural(cols.length, "collection")}` })));
   }
   function colCard(c) {
     return h("button", { class: "col-card", type: "button", onclick: () => go({ type: "col", id: c.id }) },
@@ -1152,7 +1317,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       h("div", { style: "min-width:0" },
         h("div", { class: "cname", text: c.name || "Untitled" }),
         c.description ? h("div", { class: "cdesc", text: c.description }) : null,
-        h("div", { class: "ccount", text: plural((c.links || []).length, "link") })));
+        h("div", { class: "ccount", text: plural(c.items.length, "mod") })));
   }
   function addCard(label, onclick) {
     return h("button", { class: "add-card", type: "button", onclick }, h("span", { class: "plus", text: "+" }), h("span", { text: label }));
@@ -1163,11 +1328,11 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (!state.games.length && !state.collections.length) {
       panel.replaceChildren(...[quickNode(), h("div", { class: "card state" },
         h("h2", { text: "Start your ledger" }),
-        h("p", { text: "Add the games you mod, then make collections of links for each one: Nexus mod pages, Steam Workshop items, GitHub repos, guides, wikis." }),
+        h("p", { text: "Add the games you mod. Each game gets a Library of mods, and you can build collections from it: a pile of favorites, a medieval playthrough, whatever you like." }),
         h("ol", null,
           h("li", { text: "Add a game and give it a picture." }),
-          h("li", { text: "Create a collection for that game, with a name, description and an icon from game-icons.net." }),
-          h("li", { text: "Paste links into it, or use the bookmark button from Settings to add the page you're on." })),
+          h("li", { text: "Add mods to its Library, or straight into a collection." }),
+          h("li", { text: "Make more collections and pick mods from the Library for each one." })),
         h("div", { class: "btns" },
           h("button", { class: "btn primary", type: "button", onclick: () => openGameDialog(null) }, "+ Add a game"),
           h("button", { class: "btn", type: "button", onclick: () => openDialog(null) }, "+ New collection")))].filter(Boolean));
@@ -1177,16 +1342,42 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     panel.replaceChildren(...[
       quickNode(),
       h("div", { class: "view-head" }, h("h2", { text: "My games" }),
-        h("span", { class: "hint", text: `${plural(state.games.length, "game")} · ${plural(state.collections.length, "collection")} · ${plural(linkCount(state.collections), "link")}` })),
+        h("span", { class: "hint", text: `${plural(state.games.length, "game")} · ${plural(state.mods.length, "mod")} · ${plural(state.collections.length, "collection")}` })),
       h("div", { class: "game-grid" }, ...sortedGames().map(gameCard), addCard("Add a game", () => openGameDialog(null))),
       loose.length ? h("h3", { class: "section-label", text: "Collections without a game" }) : null,
       loose.length ? h("div", { class: "col-grid" }, ...loose.map(colCard)) : null,
     ].filter(Boolean));
   }
 
-  /* ----- game view: banner, collections, and a finder across the game's links ----- */
+  /* ----- game view: banner, collections, Library ----- */
+  function libraryAddForm(g) {
+    const urlIn = h("input", { class: "field mono", id: "libUrl", placeholder: "Paste a link (https://…)", autocomplete: "off", inputmode: "url", "aria-label": "Link URL" });
+    const titleIn = h("input", { class: "field", id: "libTitle", placeholder: "Title (optional)", maxlength: "200", "aria-label": "Title" });
+    const authorIn = h("input", { class: "field", id: "libAuthor", placeholder: "Author (optional)", maxlength: "80", "aria-label": "Author" });
+    const editor = tagEditor(g.id, [], "libTags");
+    const reqEd = requiresEditor(g.id, null, [], "libReqs");
+    const noteIn = h("input", { class: "field", id: "libNote", placeholder: "Note (optional)", maxlength: "600", "aria-label": "Note" });
+    const err = h("div", { class: "err", hidden: true });
+    urlIn.addEventListener("input", () => { const u = normUrl(urlIn.value); titleIn.placeholder = u ? guessTitle(u) : "Title (optional)"; err.hidden = true; });
+    const form = h("form", { class: "add", style: "padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg)" },
+      h("div", { class: "add-row" }, urlIn, titleIn, h("button", { class: "btn primary", type: "submit" }, "Add to Library")),
+      h("div", { class: "add-row2" }, authorIn, editor.el), reqEd.el, noteIn, err);
+    form.addEventListener("submit", (ev) => {
+      ev.preventDefault();
+      const url = normUrl(urlIn.value);
+      if (!url) { err.textContent = "Enter a web address, like https://www.nexusmods.com/…"; err.hidden = false; urlIn.focus(); return; }
+      const res = addMod(g.id, { url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags: editor.commit(), requires: reqEd.get(), note: noteIn.value.trim() });
+      markDirty(`Add ${linkLabel(res.m)} to ${g.name} Library`);
+      render();
+      toast(res.reused ? "That mod was already in the Library" : "Added to the Library");
+      const again = $("libUrl"); if (again) again.focus();
+    });
+    return form;
+  }
+
   function renderGameView(g) {
     const cols = colsOf(g.id);
+    const libMods = modsIn(g.id);
     const del = h("button", { class: "btn danger" + (state.gameDeleteArmed ? " armed" : ""), type: "button", onclick: () => {
       if (!state.gameDeleteArmed) {
         state.gameDeleteArmed = true; render();
@@ -1196,23 +1387,18 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       deleteGame(g.id);
     } }, state.gameDeleteArmed ? (cols.length ? `Delete game (keeps its ${plural(cols.length, "collection")})` : "Delete for good") : "Delete");
 
-    const search = h("input", { class: "field", id: "gameSearch", type: "search", placeholder: `Search all ${g.name} links`, "aria-label": "Search this game's links" });
+    const search = h("input", { class: "field", id: "libSearch", type: "search", placeholder: `Search the ${g.name} Library`, "aria-label": "Search the Library" });
     search.value = state.filter;
-    const barEl = h("div");
-    const resultsEl = h("div");
-    const allLinks = [];
-    for (const c of cols) for (const l of c.links || []) allLinks.push({ c, l });
+    const barEl = h("div"), listBox = h("div"), countHint = h("span", { class: "hint" });
     function update(syncSearch) {
+      idxCache.clear();
       if (syncSearch) search.value = state.filter;
-      barEl.replaceChildren(filterBar(g.id, allLinks.map((x) => x.l), update));
-      if (!filtersActive()) {
-        resultsEl.replaceChildren(h("div", { class: "hint", text: allLinks.length ? "Pick a tag, search, or use Mine to find links across every collection in this game." : "No links in this game yet." }));
-        return;
-      }
-      const hits = allLinks.filter((x) => linkMatches(x.l, g.id)).sort((a, b) => (b.l.addedAt || 0) - (a.l.addedAt || 0));
-      resultsEl.replaceChildren(
-        h("div", { class: "hint", text: `${plural(hits.length, "link")} found` }),
-        hits.length ? h("ol", { class: "links" }, hits.map((x) => linkRow(x.c, x.l, { showCol: true }))) : h("div", { class: "none-found", text: "Nothing matches these filters." }));
+      const live = modsIn(g.id);
+      barEl.replaceChildren(filterBar(g.id, live, update));
+      const hits = live.filter((m) => modMatches(m, g.id)).sort(sorter((m) => m.addedAt || 0));
+      countHint.textContent = filtersActive() ? `${hits.length} of ${live.length}` : "";
+      if (!live.length) { listBox.replaceChildren(h("div", { class: "none-found", text: "The Library is empty. Mods you add to any of this game's collections show up here, or add one directly." })); return; }
+      listBox.replaceChildren(hits.length ? h("ol", { class: "links" }, hits.map((m) => modRow(m, { showCols: true }))) : h("div", { class: "none-found", text: "Nothing matches these filters." }));
     }
     search.addEventListener("input", () => { state.filter = search.value; update(); });
 
@@ -1223,14 +1409,18 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
         h("div", { class: "info" },
           h("div", { style: "min-width:0" },
             h("h2", { text: g.name }),
-            h("div", { class: "meta", text: `${plural(cols.length, "collection")} · ${plural(linkCount(cols), "link")} · ${plural(tagList(g.id).length, "tag")}` })),
+            h("div", { class: "meta", text: `${plural(libMods.length, "mod")} in Library · ${plural(cols.length, "collection")} · ${plural(tagList(g.id).length, "tag")}` })),
           h("div", { class: "acts" },
             h("button", { class: "btn", type: "button", onclick: () => openTagManager(g.id) }, "Tags"),
             h("button", { class: "btn", type: "button", onclick: () => openGameDialog(g.id) }, "Edit"), del))),
       h("div", { class: "col-grid" }, ...cols.map(colCard), addCard("New collection for this game", () => openDialog(null, { gameId: g.id }))),
       h("section", { class: "card", style: "display:grid;gap:10px" },
-        h("div", { class: "add-label", text: `Find links in ${g.name}` }),
-        search, barEl, resultsEl),
+        h("div", { class: "add-head" },
+          h("div", { class: "add-label", text: `Library · ${plural(libMods.length, "mod")}` }),
+          h("button", { class: "btn sm" + (state.libFormOpen ? "" : " primary"), type: "button", onclick: () => { state.libFormOpen = !state.libFormOpen; render(); const u = $("libUrl"); if (u) u.focus(); } }, state.libFormOpen ? "Close" : "+ Add to Library")),
+        state.libFormOpen ? libraryAddForm(g) : null,
+        h("div", { class: "tools" }, search, sortSelect("libSort", () => update()), countHint),
+        barEl, listBox),
     ].filter(Boolean));
     update();
   }
@@ -1241,37 +1431,38 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (!myNames().length) {
       panel.replaceChildren(h("div", { class: "card state" },
         h("h2", { text: "My uploads" }),
-        h("p", { text: "Set your author name in Settings, and every link you're the author of will be gathered here." }),
+        h("p", { text: "Set your author name in Settings, and every mod you're the author of will be gathered here." }),
         h("button", { class: "btn primary", type: "button", onclick: openSettings }, "Open Settings")));
       return;
     }
     const sections = [];
-    const groups = [...sortedGames().map((g) => ({ g, cols: colsOf(g.id) })), { g: null, cols: colsOf(NO_GAME) }];
     let total = 0;
-    for (const { g, cols } of groups) {
-      const items = [];
-      for (const c of cols) for (const l of c.links || []) if (isMine(l)) items.push({ c, l });
-      if (!items.length) continue;
-      total += items.length;
+    const groups = [...sortedGames().map((g) => ({ g, mods: modsIn(g.id) })), { g: null, mods: state.mods.filter((m) => !tagGid(m.scope)) }];
+    for (const { g, mods } of groups) {
+      const mine = mods.filter(isMine).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
+      if (!mine.length) continue;
+      total += mine.length;
       sections.push(h("section", { class: "card", style: "display:grid;gap:8px" },
         h("h3", { class: "section-label", style: "margin:0" }, g ? gameArt(g, "mini") : null, g ? g.name : "No game"),
-        h("ol", { class: "links" }, items.sort((a, b) => (b.l.addedAt || 0) - (a.l.addedAt || 0)).map((x) => linkRow(x.c, x.l, { showCol: true })))));
+        h("ol", { class: "links" }, mine.map((m) => modRow(m, { showCols: true })))));
     }
     panel.replaceChildren(...[
       quickNode(),
-      h("div", { class: "view-head" }, h("h2", { text: "My uploads" }), h("span", { class: "hint", text: `${plural(total, "link")} by ${state.settings.myAuthor}` })),
-      ...(sections.length ? sections : [h("div", { class: "card state" }, h("p", { text: `No links have the author ${state.settings.myAuthor} yet. Add an author when you save a link, or edit an existing one.` }))]),
+      h("div", { class: "view-head" }, h("h2", { text: "My uploads" }), h("span", { class: "hint", text: `${plural(total, "mod")} by ${state.settings.myAuthor}` })),
+      ...(sections.length ? sections : [h("div", { class: "card state" }, h("p", { text: `No mods have the author ${state.settings.myAuthor} yet. Add an author when you save a mod, or edit an existing one.` }))]),
     ].filter(Boolean));
   }
 
-  /* ----- bookmarklet quick-add card (kept as one node so typing survives re-renders) ----- */
+  /* ----- bookmarklet quick-add card ----- */
   let quickEl = null, quickSel = null;
+  const quickScope = (v) => (!v || v === "__new" ? null : v.startsWith("lib:") ? v.slice(4) : (getCol(v) ? scopeOfCol(getCol(v)) : null));
   function fillQuickSelect(sel) {
     const keep = sel.value;
     const opts = [];
     for (const g of sortedGames()) {
-      const cols = colsOf(g.id);
-      if (cols.length) opts.push(h("optgroup", { label: g.name }, cols.map((c) => h("option", { value: c.id }, c.name || "Untitled"))));
+      opts.push(h("optgroup", { label: g.name },
+        h("option", { value: "lib:" + g.id }, `${g.name} Library only`),
+        colsOf(g.id).map((c) => h("option", { value: c.id }, c.name || "Untitled"))));
     }
     const loose = colsOf(NO_GAME);
     if (loose.length) opts.push(h("optgroup", { label: state.games.length ? "No game" : "Collections" }, loose.map((c) => h("option", { value: c.id }, c.name || "Untitled"))));
@@ -1287,23 +1478,23 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     const titleIn = h("input", { class: "field", id: "qTitle", maxlength: "200", "aria-label": "Title" }); titleIn.value = cleanTitle(q.title) || guessTitle(normUrl(q.url) || q.url);
     const authorIn = h("input", { class: "field", id: "qAuthor", maxlength: "80", placeholder: "Author (optional)", "aria-label": "Author" }); authorIn.value = (q.author || "").slice(0, 80);
     const noteIn = h("input", { class: "field", id: "qNote", maxlength: "600", placeholder: "Note (optional)", "aria-label": "Note" });
-    const sel = quickSel = h("select", { class: "field", id: "qCol", "aria-label": "Collection" });
+    const sel = quickSel = h("select", { class: "field", id: "qCol", "aria-label": "Where to add it" });
     fillQuickSelect(sel);
     const last = store.get("ll.lastQuick");
-    if (last && getCol(last)) sel.value = last;
+    if (last && [...sel.options].some((o) => o.value === last)) sel.value = last;
     else if (state.view.type === "col" && getCol(state.view.id)) sel.value = state.view.id;
-    if (!state.collections.length) sel.value = "__new";
+    else if (state.view.type === "game" && getGame(state.view.id)) sel.value = "lib:" + state.view.id;
+    if (!state.games.length && !state.collections.length) sel.value = "__new";
     const tagSlot = h("div"), reqSlot = h("div");
-    let editor = null, reqEd = null, editorGid;
+    let editor = null, reqEd = null, edScope;
     function swapEditor() {
-      const gid = sel.value && sel.value !== "__new" ? gidOf(getCol(sel.value)) : null;
-      if (editor && gid === editorGid) return;
+      const scope = quickScope(sel.value);
+      if (editor && scope === edScope) return;
       const names = editor ? editor.names() : [];
-      editor = tagEditor(gid, [], "qTags"); editorGid = gid;
+      editor = tagEditor(tagGid(scope), [], "qTags"); edScope = scope;
       names.forEach((n) => editor.addName(n));
       tagSlot.replaceChildren(editor.el);
-      // Requirements belong to one game, so switching games starts the list fresh.
-      reqEd = requiresEditor(gid, null, [], "qReqs");
+      reqEd = requiresEditor(scope, null, [], "qReqs");
       reqSlot.replaceChildren(reqEd.el);
     }
     swapEditor();
@@ -1313,10 +1504,9 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       h("div", { class: "add-label", text: "Add this page" }),
       h("div", { class: "row2" }, titleIn, sel),
       h("div", { class: "add-row2" }, authorIn, tagSlot),
-      reqSlot,
-      urlIn, noteIn, err,
+      reqSlot, urlIn, noteIn, err,
       h("div", { class: "dlg-foot", style: "justify-content:flex-start" },
-        h("button", { class: "btn primary", type: "submit" }, "Add to collection"),
+        h("button", { class: "btn primary", type: "submit" }, "Add"),
         h("button", { class: "btn ghost", type: "button", onclick: () => { state.quick = null; panelBuiltFor = null; render(); } }, "Dismiss")));
     card.addEventListener("submit", (ev) => {
       ev.preventDefault();
@@ -1327,17 +1517,19 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
         openDialog(null, { gameId: gid, afterCreate: (id) => { fillQuickSelect(sel); sel.value = id; swapEditor(); card.requestSubmit(); } });
         return;
       }
-      const c = getCol(sel.value);
-      if (!c) return;
       swapEditor();
-      const tags = editor.commit();
-      const requires = reqEd.get();
-      store.set("ll.lastQuick", c.id);
+      const scope = quickScope(sel.value);
+      if (!scope) return;
+      const colId = sel.value.startsWith("lib:") ? null : sel.value;
+      const res = addMod(scope, { url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags: editor.commit(), requires: reqEd.get(), note: noteIn.value.trim() }, colId);
+      store.set("ll.lastQuick", sel.value);
       state.quick = null;
-      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags, requires, note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
       panelBuiltFor = null;
-      go({ type: "col", id: c.id });
-      afterSaveQueue(() => toast(`Saved to ${c.name}. You can close this tab.`));
+      const c = colId ? getCol(colId) : null, g = tagGid(scope) ? getGame(scope) : null;
+      const where = c ? c.name : `the ${g ? g.name : ""} Library`;
+      markDirty(`Add ${linkLabel(res.m)} to ${where}`);
+      go(c ? { type: "col", id: c.id } : { type: "game", id: scope });
+      afterSaveQueue(() => toast(`Saved to ${where}. You can close this tab.`));
       flush();
     });
     quickEl = card;
@@ -1350,27 +1542,28 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     else if (state.quick && quickEl && !quickEl.isConnected) $("panel").prepend(quickNode());
     else if (quickEl) fillQuickSelect(quickSel);
     renderHead(col);
-    if (!state.editingLinkId) renderLinks(col);
+    if (!state.editingModId) renderEntries(col);
   }
 
   function buildColPanel(col) {
     panelBuiltFor = col.id;
-    const gid = gidOf(col);
+    const scope = scopeOfCol(col), gid = tagGid(scope), g = gid ? getGame(gid) : null;
     headEl = h("section", { class: "card", style: "display:grid;gap:12px" });
     const urlIn = h("input", { class: "field mono", id: "addUrl", placeholder: "Paste a link (https://…)", autocomplete: "off", inputmode: "url", "aria-label": "Link URL" });
-    const titleIn = h("input", { class: "field", id: "addTitle", placeholder: "Title (optional)", maxlength: "200", "aria-label": "Link title" });
+    const titleIn = h("input", { class: "field", id: "addTitle", placeholder: "Title (optional)", maxlength: "200", "aria-label": "Title" });
     const authorIn = h("input", { class: "field", id: "addAuthor", placeholder: "Author (optional)", maxlength: "80", "aria-label": "Author" });
     const editor = tagEditor(gid, [], "addTags");
-    const reqEd = requiresEditor(gid, null, [], "addReqs");
-    const noteIn = h("input", { class: "field", id: "addNote", placeholder: "Note (optional), e.g. install after USSEP", maxlength: "600", "aria-label": "Note" });
+    const reqEd = requiresEditor(scope, null, [], "addReqs");
+    const noteIn = h("input", { class: "field", id: "addNote", placeholder: "Note (optional, shown everywhere this mod appears)", maxlength: "600", "aria-label": "Note" });
     const err = h("div", { class: "err", hidden: true });
     const form = h("form", { class: "card add", id: "addForm" },
-      h("div", { class: "add-label", text: "Add a link" }),
+      h("div", { class: "add-head" },
+        h("div", { class: "add-label", text: "Add a mod" }),
+        g ? h("button", { class: "btn sm", type: "button", onclick: () => openLibPicker(col.id) }, `Add from ${g.name} Library`) : null),
       h("div", { class: "add-row" }, urlIn, titleIn, h("button", { class: "btn primary", type: "submit" }, "Add")),
       h("div", { class: "add-row2" }, authorIn, editor.el),
-      reqEd.el,
-      noteIn, err,
-      h("div", { class: "hint", text: "Tags: type and press Enter. Tip: paste a link anywhere on this page outside a text box and it lands here." }));
+      reqEd.el, noteIn, err,
+      h("div", { class: "hint", text: g ? `New mods also go into the ${g.name} Library. Tip: paste a link anywhere on this page outside a text box and it lands here.` : "Tip: paste a link anywhere on this page outside a text box and it lands here." }));
     urlIn.addEventListener("input", () => { const u = normUrl(urlIn.value); titleIn.placeholder = u ? guessTitle(u) : "Title (optional)"; err.hidden = true; });
     form.addEventListener("submit", (ev) => {
       ev.preventDefault();
@@ -1378,33 +1571,28 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       if (!url) { err.textContent = "Enter a web address, like https://www.nexusmods.com/…"; err.hidden = false; urlIn.focus(); return; }
       const c = getCol(state.view.id);
       if (!c) return;
-      const dupe = (c.links || []).some((l) => l.url === url);
-      const tags = editor.commit();
-      const requires = reqEd.get();
-      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags, requires, note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
+      const res = addMod(scopeOfCol(c), { url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags: editor.commit(), requires: reqEd.get(), note: noteIn.value.trim() }, c.id);
+      if (!res.alreadyHere) markDirty(`Add ${linkLabel(res.m)} to ${c.name}`);
       urlIn.value = ""; titleIn.value = ""; noteIn.value = ""; authorIn.value = ""; titleIn.placeholder = "Title (optional)";
       editor.reset(); reqEd.reset();
-      toast(dupe ? "Added. That link was already in this collection." : "Link added");
+      render();
+      toast(res.alreadyHere ? "That mod is already in this collection" : res.reused ? "It was already in the Library, so it's linked here" : "Mod added");
       urlIn.focus();
     });
 
-    colSearch = h("input", { class: "field", id: "linkSearch", type: "search", placeholder: "Search titles, authors, tags, notes", "aria-label": "Search links" });
+    colSearch = h("input", { class: "field", id: "linkSearch", type: "search", placeholder: "Search titles, authors, tags, notes", "aria-label": "Search mods" });
     colSearch.value = state.filter;
-    colSearch.addEventListener("input", () => { state.filter = colSearch.value; renderLinks(getCol(state.view.id)); });
-    const sort = h("select", { class: "field", id: "linkSort", "aria-label": "Sort links" },
-      h("option", { value: "new" }, "Newest first"), h("option", { value: "old" }, "Oldest first"),
-      h("option", { value: "az" }, "Title A–Z"), h("option", { value: "author" }, "By author"), h("option", { value: "site" }, "By site"));
-    sort.value = state.sort;
-    sort.addEventListener("change", () => { state.sort = sort.value; renderLinks(getCol(state.view.id)); });
+    colSearch.addEventListener("input", () => { state.filter = colSearch.value; renderEntries(getCol(state.view.id)); });
     countEl = h("span", { class: "hint" });
     filtersEl = h("div");
     listEl = h("ol", { class: "links" });
-    const listCard = h("section", { class: "card", style: "display:grid;gap:10px" }, h("div", { class: "tools" }, colSearch, sort, countEl), filtersEl, listEl);
+    const listCard = h("section", { class: "card", style: "display:grid;gap:10px" },
+      h("div", { class: "tools" }, colSearch, sortSelect("linkSort", () => renderEntries(getCol(state.view.id))), countEl), filtersEl, listEl);
     $("panel").replaceChildren(...[quickNode(), headEl, form, listCard].filter(Boolean));
   }
 
   function renderHead(col) {
-    const n = (col.links || []).length;
+    const n = col.items.length;
     const g = gameOf(col);
     const del = h("button", { class: "btn danger" + (state.deleteArmed ? " armed" : ""), type: "button", onclick: () => {
       if (!state.deleteArmed) {
@@ -1413,7 +1601,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
         return;
       }
       deleteCollection(col.id);
-    } }, state.deleteArmed ? `Delete for good (${plural(n, "link")})` : "Delete");
+    } }, state.deleteArmed ? (g ? "Delete collection (mods stay in the Library)" : `Delete for good (${plural(n, "mod")})`) : "Delete");
     const crumb = h("div", { class: "crumb" },
       h("button", { type: "button", onclick: () => go({ type: "home" }) }, "My games"),
       h("span", { text: "›", "aria-hidden": "true" }),
@@ -1424,50 +1612,30 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
         h("div", { class: "main" },
           h("h2", { text: col.name || "Untitled" }),
           h("p", { class: "desc" + (col.description ? "" : " none"), text: col.description || "No description." }),
-          h("div", { class: "meta", text: `${plural(n, "link")} · created ${fmtDate(col.createdAt)}` })),
+          h("div", { class: "meta", text: `${plural(n, "mod")} · created ${fmtDate(col.createdAt)}` })),
         h("div", { class: "acts" }, h("button", { class: "btn", type: "button", onclick: () => openDialog(col.id) }, "Edit"), del)));
   }
 
-  function sortedLinks(col) {
-    const gid = gidOf(col);
-    const links = (col.links || []).filter((l) => linkMatches(l, gid));
-    const by = {
-      new: (a, b) => (b.addedAt || 0) - (a.addedAt || 0),
-      old: (a, b) => (a.addedAt || 0) - (b.addedAt || 0),
-      az: (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }),
-      author: (a, b) => (!a.author - !b.author) || (a.author || "").localeCompare(b.author || "", undefined, { sensitivity: "base" }) || (a.title || "").localeCompare(b.title || ""),
-      site: (a, b) => siteOf(a.url).localeCompare(siteOf(b.url)) || (a.title || "").localeCompare(b.title || ""),
-    }[state.sort];
-    return links.sort(by);
-  }
-
-  function renderLinks(col, syncSearch) {
+  function renderEntries(col, syncSearch) {
     if (!col || !listEl) return;
     idxCache.clear();
     if (syncSearch && colSearch) colSearch.value = state.filter;
-    const all = (col.links || []).length;
-    const links = sortedLinks(col);
-    filtersEl.replaceChildren(filterBar(gidOf(col), col.links || [], (sync) => renderLinks(getCol(state.view.id), sync)));
-    countEl.textContent = filtersActive() ? `${links.length} of ${all}` : "";
-    if (!all) { listEl.replaceChildren(h("li", { class: "none-found", text: "No links yet. Paste one above to start." })); return; }
-    if (!links.length) { listEl.replaceChildren(h("li", { class: "none-found", text: "Nothing matches these filters." })); return; }
-    listEl.replaceChildren(...links.map((l) => linkRow(col, l)));
-  }
-
-  function moveOptions(excludeId) {
-    const out = [];
-    for (const g of sortedGames()) {
-      const cols = colsOf(g.id).filter((c) => c.id !== excludeId);
-      if (cols.length) out.push(h("optgroup", { label: g.name }, cols.map((c) => h("option", { value: c.id }, c.name || "Untitled"))));
+    const gid = tagGid(scopeOfCol(col));
+    const all = entriesOf(col);
+    const shown = all.filter((x) => modMatches(x.m, gid, x.it.note)).sort(sorter((x) => x.it.addedAt || 0));
+    filtersEl.replaceChildren(filterBar(gid, all.map((x) => x.m), (sync) => renderEntries(getCol(state.view.id), sync)));
+    countEl.textContent = filtersActive() ? `${shown.length} of ${all.length}` : "";
+    if (!all.length) {
+      listEl.replaceChildren(h("li", { class: "none-found", text: gameOf(col) ? "No mods yet. Paste a link above, or pick some from the Library." : "No mods yet. Paste a link above to start." }));
+      return;
     }
-    const loose = colsOf(NO_GAME).filter((c) => c.id !== excludeId);
-    if (loose.length) out.push(h("optgroup", { label: "No game" }, loose.map((c) => h("option", { value: c.id }, c.name || "Untitled"))));
-    return out;
+    if (!shown.length) { listEl.replaceChildren(h("li", { class: "none-found", text: "Nothing matches these filters." })); return; }
+    listEl.replaceChildren(...shown.map((x) => modRow(x.m, { col, item: x.it })));
   }
 
-  // Clicking a tag or author narrows the current view; from My uploads it opens that game's finder.
-  function onTagClick(col, t) {
-    const gid = gidOf(col);
+  /* ----- one mod row (used in collections, the Library and My uploads) ----- */
+  function onTagClick(m, t) {
+    const gid = tagGid(m.scope);
     if (state.view.type === "mine") { go(gid ? { type: "game", id: gid } : { type: "home" }); if (gid) { state.tagFilter = new Set([t.id]); render(); } return; }
     state.tagFilter.has(t.id) ? state.tagFilter.delete(t.id) : state.tagFilter.add(t.id);
     render();
@@ -1478,43 +1646,67 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     render();
   }
 
-  function linkRow(col, l, opts = {}) {
-    const host = siteOf(l.url);
-    const gid = gidOf(col);
-    const opts2 = state.collections.length > 1 ? moveOptions(col.id) : [];
-    const move = opts2.length ? h("select", { "aria-label": "Move to another collection", onchange: (ev) => { if (ev.target.value) moveLink(col.id, ev.target.value, l.id); } },
-      h("option", { value: "" }, "Move to…"), ...opts2) : null;
-    const tags = (l.tags || []).map((id) => tagById(gid, id)).filter(Boolean).sort(byName);
-    const author = (l.author || "").trim();
-    const idx = gameIndex(gid);
-    const reqEls = (l.requires || []).filter((r) => r.id !== l.id).map((r) => {
+  function modRow(m, ctx = {}) {
+    const host = siteOf(m.url);
+    const gid = tagGid(m.scope);
+    const idx = scopeIndex(m.scope);
+    const tags = m.tags.map((id) => tagById(gid, id)).filter(Boolean).sort(byName);
+    const author = (m.author || "").trim();
+    const reqEls = m.requires.filter((r) => r.id !== m.id).map((r) => {
       const hit = idx.byId.get(r.id);
       return hit
-        ? h("a", { class: "req", href: hit.l.url, target: "_blank", rel: "noopener noreferrer", title: `Open ${linkLabel(hit.l)} (in ${hit.c.name})` }, linkLabel(hit.l))
-        : h("span", { class: "req gone", title: "This mod is no longer in this game's ledger", text: r.name });
+        ? h("a", { class: "req", href: hit.url, target: "_blank", rel: "noopener noreferrer", title: `Open ${linkLabel(hit)}` }, linkLabel(hit))
+        : h("span", { class: "req gone", title: "This mod is no longer in the Library", text: r.name });
     });
-    const neededBy = (idx.neededBy.get(l.id) || []).map((id) => idx.byId.get(id)).filter(Boolean);
+    const neededBy = (idx.neededBy.get(m.id) || []).map((id) => idx.byId.get(id)).filter(Boolean);
+    const inCols = idx.inCols.get(m.id) || [];
+    const others = ctx.col ? inCols.filter((c) => c.id !== ctx.col.id) : inCols;
+    const colBtn = (c) => h("button", { class: "col-label", type: "button", onclick: () => go({ type: "col", id: c.id }) }, tile(c, "sm"), c.name);
+
+    // "Add to…": other collections in the same game that don't have this mod yet.
+    const targets = gid ? colsOf(gid).filter((c) => !c.items.some((i) => i.modId === m.id)) : [];
+    const addTo = targets.length ? h("select", { "aria-label": "Add to another collection", onchange: (ev) => { const v = ev.target.value; if (v) addItemTo(v, m.id); } },
+      h("option", { value: "" }, "Add to…"), ...targets.map((c) => h("option", { value: c.id }, c.name || "Untitled"))) : null;
+
+    let removeBtn;
+    if (ctx.col) {
+      removeBtn = h("button", { class: "btn ghost danger", type: "button", title: gid ? "Take it out of this collection. It stays in the Library." : "Take it out of this collection",
+        onclick: () => removeItem(ctx.col.id, m.id) }, "Remove");
+    } else {
+      const armed = state.modDeleteArmed === m.id;
+      removeBtn = h("button", { class: "btn ghost danger" + (armed ? " armed" : ""), type: "button", onclick: () => {
+        if (!armed) {
+          state.modDeleteArmed = m.id; render();
+          setTimeout(() => { if (state.modDeleteArmed === m.id) { state.modDeleteArmed = null; render(); } }, 5000);
+          return;
+        }
+        deleteMod(m.id);
+      } }, armed ? (inCols.length ? `Delete (also from ${plural(inCols.length, "collection")})` : "Delete for good") : "Delete");
+    }
+
     return h("li", { class: "link" },
       h("div", { style: "min-width:0;display:grid;gap:3px" },
-        opts.showCol ? h("button", { class: "col-label", type: "button", onclick: () => go({ type: "col", id: col.id }) }, tile(col, "sm"), col.name) : null,
         h("div", { class: "line1" },
           h("span", { class: "chip " + chipClass(host), text: host || "link" }),
-          h("a", { class: "ttl", href: l.url, target: "_blank", rel: "noopener noreferrer", text: l.title || l.url }),
-          isMine(l) ? h("span", { class: "mine", text: "Mine" }) : null),
+          h("a", { class: "ttl", href: m.url, target: "_blank", rel: "noopener noreferrer", text: linkLabel(m) }),
+          isMine(m) ? h("span", { class: "mine", text: "Mine" }) : null),
         author || tags.length ? h("div", { class: "line1" },
-          author ? h("span", { class: "by" }, "by ", state.view.type === "mine" ? h("b", { text: author }) : h("button", { type: "button", title: "Show links by " + author, onclick: () => onAuthorClick(author) }, author)) : null,
-          tags.length ? h("span", { class: "tags" }, tags.map((t) => tagChip(t, { pressed: state.view.type !== "mine" ? state.tagFilter.has(t.id) : null, title: "Filter by " + t.name, onclick: () => onTagClick(col, t) }))) : null) : null,
+          author ? h("span", { class: "by" }, "by ", state.view.type === "mine" ? h("b", { text: author }) : h("button", { type: "button", title: "Show mods by " + author, onclick: () => onAuthorClick(author) }, author)) : null,
+          tags.length ? h("span", { class: "tags" }, tags.map((t) => tagChip(t, { pressed: state.view.type !== "mine" ? state.tagFilter.has(t.id) : null, title: "Filter by " + t.name, onclick: () => onTagClick(m, t) }))) : null) : null,
         reqEls.length ? h("div", { class: "reqs" }, h("span", { class: "req-label", text: "Requires" }), ...reqEls) : null,
         neededBy.length ? h("div", { class: "reqs" }, h("span", { class: "req-label", text: "Needed by" }),
-          ...neededBy.map((x) => h("a", { class: "req soft", href: x.l.url, target: "_blank", rel: "noopener noreferrer", title: `Open ${linkLabel(x.l)} (in ${x.c.name})` }, linkLabel(x.l)))) : null,
-        h("div", { class: "url", text: l.url }),
-        l.note ? h("p", { class: "note", text: l.note }) : null,
-        l.addedAt ? h("div", { class: "added", text: "Added " + fmtDate(l.addedAt) }) : null),
+          ...neededBy.map((x) => h("a", { class: "req soft", href: x.url, target: "_blank", rel: "noopener noreferrer", title: `Open ${linkLabel(x)}` }, linkLabel(x)))) : null,
+        h("div", { class: "url", text: m.url }),
+        m.note ? h("p", { class: "note", text: m.note }) : null,
+        ctx.item && ctx.item.note ? h("p", { class: "note local" }, h("span", { class: "req-label", text: "This collection" }), ctx.item.note) : null,
+        ctx.showCols
+          ? h("div", { class: "in-cols" }, h("span", { class: "req-label", text: inCols.length ? "In" : "Library only" }), ...inCols.map(colBtn))
+          : (others.length && gid ? h("div", { class: "in-cols" }, h("span", { class: "req-label", text: "Also in" }), ...others.map(colBtn)) : null),
+        h("div", { class: "added", text: "Added " + fmtDate((ctx.item && ctx.item.addedAt) || m.addedAt) })),
       h("div", { class: "ra" },
-        h("button", { class: "btn ghost", type: "button", onclick: (ev) => copy(l.url, ev.currentTarget) }, "Copy"),
-        h("button", { class: "btn ghost", type: "button", onclick: (ev) => editLink(col.id, l.id, ev.currentTarget.closest("li")) }, "Edit"),
-        move,
-        h("button", { class: "btn ghost danger", type: "button", onclick: () => removeLink(col.id, l.id) }, "Remove")));
+        h("button", { class: "btn ghost", type: "button", onclick: (ev) => copy(m.url, ev.currentTarget) }, "Copy"),
+        h("button", { class: "btn ghost", type: "button", onclick: (ev) => editMod(m.id, ctx.col ? ctx.col.id : null, ev.currentTarget.closest("li")) }, "Edit"),
+        addTo, removeBtn));
   }
 
   function copy(text, btn) {
@@ -1523,81 +1715,71 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     try { navigator.clipboard.writeText(text).then(done, fail); } catch (e) { fail(); }
   }
 
-  function editLink(colId, linkId, li) {
-    const c = getCol(colId); const l = c && c.links.find((x) => x.id === linkId);
-    if (!l) return;
-    state.editingLinkId = linkId;
-    const gid = gidOf(c);
-    const urlIn = h("input", { class: "field mono", id: "editUrl", "aria-label": "Link URL" }); urlIn.value = l.url;
-    const ttlIn = h("input", { class: "field", id: "editTitle", maxlength: "200", "aria-label": "Title", placeholder: "Title" }); ttlIn.value = l.title || "";
-    const authorIn = h("input", { class: "field", id: "editAuthor", maxlength: "80", "aria-label": "Author", placeholder: "Author" }); authorIn.value = l.author || "";
-    const editor = tagEditor(gid, l.tags || [], "editTags");
-    const reqEd = requiresEditor(gid, l.id, l.requires || [], "editReqs");
-    const noteIn = h("textarea", { class: "field", id: "editNote", rows: "2", maxlength: "600", "aria-label": "Note", placeholder: "Note" }); noteIn.value = l.note || "";
+  function editMod(modId, colId, li) {
+    const m = getMod(modId);
+    if (!m) return;
+    const c = colId ? getCol(colId) : null;
+    const item = c ? c.items.find((i) => i.modId === modId) : null;
+    state.editingModId = modId;
+    const gid = tagGid(m.scope);
+    const inCount = (scopeIndex(m.scope).inCols.get(m.id) || []).length;
+    const urlIn = h("input", { class: "field mono", id: "editUrl", "aria-label": "Link URL" }); urlIn.value = m.url;
+    const ttlIn = h("input", { class: "field", id: "editTitle", maxlength: "200", "aria-label": "Title", placeholder: "Title" }); ttlIn.value = m.title || "";
+    const authorIn = h("input", { class: "field", id: "editAuthor", maxlength: "80", "aria-label": "Author", placeholder: "Author" }); authorIn.value = m.author || "";
+    const editor = tagEditor(gid, m.tags, "editTags");
+    const reqEd = requiresEditor(m.scope, m.id, m.requires, "editReqs");
+    const noteIn = h("textarea", { class: "field", id: "editNote", rows: "2", maxlength: "600", "aria-label": "Note shown everywhere", placeholder: "Note (shown everywhere this mod appears)" }); noteIn.value = m.note || "";
+    const localIn = item ? h("textarea", { class: "field", id: "editLocal", rows: "2", maxlength: "600", "aria-label": "Note for this collection", placeholder: `Note just for ${c.name}, e.g. load after X` }) : null;
+    if (localIn) localIn.value = item.note || "";
     const err = h("div", { class: "err", hidden: true });
-    const form = h("form", { class: "link-edit" }, urlIn, ttlIn, h("div", { class: "add-row2" }, authorIn, editor.el), reqEd.el, noteIn, err,
+    const form = h("form", { class: "link-edit" },
+      inCount > 1 && gid ? h("div", { class: "hint", text: `This mod is in ${plural(inCount, "collection")}. Changes here show up in all of them, except the note for this collection.` }) : null,
+      urlIn, ttlIn, h("div", { class: "add-row2" }, authorIn, editor.el), reqEd.el, noteIn, localIn, err,
       h("div", { class: "row" },
-        h("button", { class: "btn", type: "button", onclick: () => { state.editingLinkId = null; render(); } }, "Cancel"),
+        h("button", { class: "btn", type: "button", onclick: () => { state.editingModId = null; render(); } }, "Cancel"),
         h("button", { class: "btn primary", type: "submit" }, "Save")));
     form.addEventListener("submit", (ev) => {
       ev.preventDefault();
       const url = normUrl(urlIn.value);
       if (!url) { err.textContent = "Enter a valid web address."; err.hidden = false; return; }
-      const tags = editor.commit();
-      const requires = reqEd.get();
-      state.editingLinkId = null;
-      mutateLinks(colId, (links) => { const x = links.find((y) => y.id === linkId); if (x) { x.url = url; x.title = ttlIn.value.trim() || guessTitle(url); x.author = authorIn.value.trim(); x.tags = tags; x.requires = requires; x.note = noteIn.value.trim(); } }, `Edit link in ${c.name}`);
-      toast("Link saved");
+      m.url = url; m.title = ttlIn.value.trim() || guessTitle(url); m.author = authorIn.value.trim();
+      m.tags = editor.commit(); m.requires = reqEd.get(); m.note = noteIn.value.trim();
+      if (item && localIn) item.note = localIn.value.trim();
+      state.editingModId = null;
+      markDirty(`Edit ${linkLabel(m)}`);
+      render();
+      toast("Mod saved");
     });
     li.replaceChildren(form);
     ttlIn.focus();
   }
 
-  function removeLink(colId, linkId) {
-    const c = getCol(colId); if (!c) return;
-    const idx = c.links.findIndex((l) => l.id === linkId);
-    if (idx < 0) return;
-    const removed = { ...c.links[idx] };
-    mutateLinks(colId, (links) => links.splice(idx, 1), `Remove link from ${c.name}`);
-    toast("Link removed", () => mutateLinks(colId, (links) => { if (!links.some((l) => l.id === removed.id)) links.splice(Math.min(idx, links.length), 0, removed); }, `Restore link in ${c.name}`));
-  }
-
-  function moveLink(fromId, toId, linkId) {
-    const from = getCol(fromId), to = getCol(toId);
-    if (!from || !to) return;
-    const l = from.links.find((x) => x.id === linkId);
-    if (!l) return;
-    to.links = [...to.links, { ...l, tags: remapTags(l.tags, gidOf(from), gidOf(to)) }]; to.updatedAt = Date.now();
-    mutateLinks(fromId, (links) => { const i = links.findIndex((x) => x.id === linkId); if (i >= 0) links.splice(i, 1); }, `Move link to ${to.name}`);
-    toast(`Moved to ${to.name || "Untitled"}`);
-  }
-
   function deleteCollection(id) {
-    const i = state.collections.findIndex((x) => x.id === id);
-    if (i < 0) return;
-    const removed = state.collections[i];
-    const g = gameOf(removed);
-    state.collections.splice(i, 1);
+    const c = getCol(id);
+    if (!c) return;
+    const snap = snapshot();
+    const g = gameOf(c);
+    const scope = scopeOfCol(c);
+    state.collections = state.collections.filter((x) => x.id !== id);
+    if (isColScope(scope)) state.mods = state.mods.filter((m) => m.scope !== scope);
     state.deleteArmed = false; panelBuiltFor = null;
     go(g ? { type: "game", id: g.id } : { type: "home" });
-    markDirty(`Delete collection ${removed.name}`);
-    toast(`Deleted “${removed.name}”`, () => {
-      state.collections.splice(Math.min(i, state.collections.length), 0, removed);
-      markDirty(`Restore collection ${removed.name}`);
-      go({ type: "col", id: removed.id });
-    });
+    markDirty(`Delete collection ${c.name}`);
+    toast(g ? `Deleted “${c.name}”. Its mods are still in the Library.` : `Deleted “${c.name}”`, () => { restore(snap, `Restore collection ${c.name}`); go({ type: "col", id }); });
   }
 
   function deleteGame(id) {
-    const i = state.games.findIndex((g) => g.id === id);
-    if (i < 0) return;
-    const g = state.games[i];
+    const g = getGame(id);
+    if (!g) return;
+    const snap = snapshot();
     const cols = colsOf(id);
-    const savedTags = cols.map((c) => c.links.map((l) => (l.tags || []).slice()));
-    // Collections move to No game; their tags move to the shared No-game list by name.
-    for (const c of cols) c.links = c.links.map((l) => ({ ...l, tags: remapTags(l.tags, id, null) }));
-    state.games.splice(i, 1);
-    for (const c of cols) c.gameId = null;
+    // Collections move to No game and keep private copies of their mods; Library-only mods go with the game.
+    for (const c of cols) {
+      moveCollectionScope(c, id, "col:" + c.id);
+      c.gameId = null;
+    }
+    state.mods = state.mods.filter((m) => m.scope !== id);
+    state.games = state.games.filter((x) => x.id !== id);
     state.gameDeleteArmed = false;
     go({ type: "home" });
     markDirty(`Delete game ${g.name}`);
@@ -1605,17 +1787,72 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     setTimeout(() => { if (!undone) deleteImage(g.image, g.name); }, 7000);
     toast(cols.length ? `Deleted “${g.name}”. Its collections moved to No game.` : `Deleted “${g.name}”`, () => {
       undone = true;
-      state.games.push(g);
-      cols.forEach((c, ci) => {
-        const live = getCol(c.id);
-        if (!live) return;
-        live.gameId = g.id;
-        live.links = live.links.map((l, li) => ({ ...l, tags: savedTags[ci] && savedTags[ci][li] && live.links.length === savedTags[ci].length ? savedTags[ci][li] : remapTags(l.tags, null, g.id) }));
-      });
-      markDirty(`Restore game ${g.name}`);
-      go({ type: "game", id: g.id });
+      restore(snap, `Restore game ${g.name}`);
+      go({ type: "game", id });
     });
   }
+
+  /* ===== Add from Library picker ===== */
+  const ldlg = $("libDialog");
+  let lpCol = null;
+  const lpSel = new Set();
+  function openLibPicker(colId) {
+    const c = getCol(colId), g = gameOf(c);
+    if (!g) return;
+    lpCol = colId; lpSel.clear();
+    $("lpTitle").textContent = `Add from ${g.name} Library to ${c.name}`;
+    $("lpSearch").value = "";
+    drawLP();
+    ldlg.showModal();
+    $("lpSearch").focus();
+  }
+  function drawLP() {
+    const c = getCol(lpCol);
+    if (!c) return;
+    const gid = c.gameId, here = new Set(c.items.map((i) => i.modId));
+    const idx = scopeIndex(gid);
+    const lib = modsIn(gid);
+    const q = $("lpSearch").value.trim().toLowerCase();
+    const shown = lib.filter((m) => {
+      if (!q) return true;
+      const names = m.tags.map((id) => (tagById(gid, id) || {}).name || "");
+      return [m.title, m.author, m.url, ...names].some((s) => (s || "").toLowerCase().includes(q));
+    }).sort((a, b) => (here.has(a.id) - here.has(b.id)) || byLabel(a, b));
+    let body;
+    if (!lib.length) body = [h("div", { class: "lp-empty", text: "This game's Library is empty. Mods you add to any of its collections, or on the game page, show up here." })];
+    else if (!shown.length) body = [h("div", { class: "lp-empty", text: "Nothing in the Library matches that." })];
+    else body = shown.map((m) => {
+      const isHere = here.has(m.id);
+      const box = h("input", { type: "checkbox", "aria-label": linkLabel(m) });
+      box.checked = isHere || lpSel.has(m.id);
+      box.disabled = isHere;
+      box.addEventListener("change", () => { box.checked ? lpSel.add(m.id) : lpSel.delete(m.id); drawLPFoot(); });
+      const tagNames = m.tags.map((id) => (tagById(gid, id) || {}).name).filter(Boolean);
+      const sub = [m.author ? "by " + m.author : "", tagNames.join(", "), isHere ? "Already in this collection" : "In: " + whereLabel(idx, m)].filter(Boolean).join(" · ");
+      return h("label", { class: "lp-item" + (isHere ? " here" : "") }, box, h("div", { style: "min-width:0" }, h("div", { class: "lp-t", text: linkLabel(m) }), h("div", { class: "lp-s", text: sub })));
+    });
+    $("lpList").replaceChildren(...body);
+    drawLPFoot();
+  }
+  function drawLPFoot() {
+    $("lpCount").textContent = lpSel.size ? `${lpSel.size} selected` : "";
+    $("lpAdd").disabled = !lpSel.size;
+    $("lpAdd").textContent = lpSel.size ? `Add ${plural(lpSel.size, "mod")}` : "Add";
+  }
+  $("lpSearch").addEventListener("input", drawLP);
+  $("lpCancel").addEventListener("click", () => ldlg.close());
+  $("lpAdd").addEventListener("click", () => {
+    const c = getCol(lpCol);
+    if (!c || !lpSel.size) return;
+    const now = Date.now();
+    let n = 0;
+    for (const id of lpSel) if (getMod(id) && !c.items.some((i) => i.modId === id)) { c.items.push({ modId: id, note: "", addedAt: now + n }); n++; }
+    c.updatedAt = now;
+    ldlg.close();
+    markDirty(`Add ${plural(n, "mod")} to ${c.name} from the Library`);
+    render();
+    toast(`Added ${plural(n, "mod")} to ${c.name}`);
+  });
 
   /* ===== tag manager ===== */
   const tdlg = $("tagDialog");
@@ -1631,7 +1868,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
   function drawTM() {
     const list = tagList(tmGid).slice().sort(byName);
-    if (!list.length) { $("tmList").replaceChildren(h("div", { class: "hint", style: "padding:8px 0", text: "No tags yet. Add one below, or type tags when you add a link." })); return; }
+    if (!list.length) { $("tmList").replaceChildren(h("div", { class: "hint", style: "padding:8px 0", text: "No tags yet. Add one below, or type tags when you add a mod." })); return; }
     $("tmList").replaceChildren(...list.map((t) => {
       const uses = tagUses(tmGid, t.id);
       const nameIn = h("input", { class: "field", value: t.name, maxlength: "40", "aria-label": "Tag name" });
@@ -1645,10 +1882,10 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       const del = h("button", { class: "btn ghost sm danger" + (armed ? " armed" : ""), type: "button", onclick: () => {
         if (!armed) { tmArmed = t.id; drawTM(); return; }
         deleteTag(t.id);
-      } }, armed ? (uses ? `Remove from ${plural(uses, "link")}` : "Confirm") : "Delete");
+      } }, armed ? (uses ? `Remove from ${plural(uses, "mod")}` : "Confirm") : "Delete");
       return h("div", { class: "tm-row" },
         h("div", { class: "tm-name" }, tagChip(t), nameIn),
-        h("div", { class: "tm-side" }, h("span", { class: "ct", text: plural(uses, "link") }), del),
+        h("div", { class: "tm-side" }, h("span", { class: "ct", text: plural(uses, "mod") }), del),
         h("div", { class: "dots", role: "group", "aria-label": "Color for " + t.name }, TAG_COLORS.map((c) => {
           const d = h("button", { class: "dot", type: "button", title: c, "aria-label": c, "aria-pressed": String(tagColor(t) === c), onclick: () => {
             if (t.color === c) return;
@@ -1665,7 +1902,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (i < 0) return;
     const name = list[i].name;
     list.splice(i, 1);
-    for (const c of colsOf(tmGid || NO_GAME)) c.links = c.links.map((l) => ({ ...l, tags: (l.tags || []).filter((x) => x !== tagId) }));
+    for (const m of modsUsingTags(tmGid)) m.tags = m.tags.filter((x) => x !== tagId);
     state.tagFilter.delete(tagId);
     tmArmed = null;
     markDirty(`Delete tag ${name}`);
@@ -1753,10 +1990,10 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     const name = $("fName").value.trim();
     if (!name) { $("fErr").textContent = "Give the collection a name."; $("fErr").hidden = false; return; }
     const gv = $("fGame").value;
-    const body = { name, gameId: gv && gv !== "__new" ? gv : null, description: $("fDesc").value.trim(), iconSvg: state.dialogIcon || "", color: currentColor() };
+    const body = { name, gameId: gv && gv !== "__new" && getGame(gv) ? gv : null, description: $("fDesc").value.trim(), iconSvg: state.dialogIcon || "", color: currentColor() };
     if (state.dialogMode === "new") {
       const now = Date.now();
-      const col = { id: newId(), ...body, links: [], createdAt: now, updatedAt: now };
+      const col = { id: newId(), ...body, items: [], createdAt: now, updatedAt: now };
       state.collections.push(col);
       dlg.close();
       markDirty(`Create collection ${name}`);
@@ -1766,18 +2003,18 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       const c = getCol(state.dialogMode);
       dlg.close();
       if (!c) return;
-      const fromGid = gidOf(c);
-      const toGid = body.gameId && getGame(body.gameId) ? body.gameId : null;
-      if (fromGid !== toGid) {
-        // Moving to another game: carry tags over by name into that game's tag list.
-        c.links = c.links.map((l) => ({ ...l, tags: remapTags(l.tags, fromGid, toGid) }));
+      const fromScope = scopeOfCol(c);
+      Object.assign(c, body, { updatedAt: Date.now() });
+      const toScope = scopeOfCol(c);
+      if (fromScope !== toScope) {
+        // Changing game: the collection's mods move into the new game's Library (matching by address).
+        moveCollectionScope(c, fromScope, toScope);
         state.tagFilter = new Set();
         panelBuiltFor = null;
       }
-      Object.assign(c, body, { updatedAt: Date.now() });
       render();
       markDirty(`Edit collection ${name}`);
-      toast("Collection saved");
+      toast(fromScope !== toScope && !isColScope(toScope) ? `Collection saved. Its mods are now in the ${getGame(toScope).name} Library.` : "Collection saved");
     }
   });
   $("newColBtn").addEventListener("click", () => openDialog(null));
@@ -1881,14 +2118,14 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     state.settings.myAuthor = v;
     markDirty(v ? `Set author name to ${v}` : "Clear author name");
     render();
-    toast(v ? `Links by ${v} now show as Mine` : "Author name cleared");
+    toast(v ? `Mods by ${v} now show as Mine` : "Author name cleared");
   });
   $("bookmarklet").addEventListener("click", (ev) => { ev.preventDefault(); toast("Drag this button to your bookmarks bar instead of clicking it."); });
   $("setClose").addEventListener("click", () => setDlg.close());
   $("forgetBtn").addEventListener("click", async () => {
     if (dirty || saving) await flush();
     store.del("ll.token");
-    cfg.token = ""; state.connected = false; state.collections = []; state.games = []; state.looseTags = []; sha = null;
+    cfg.token = ""; state.connected = false; state.collections = []; state.games = []; state.mods = []; state.looseTags = []; sha = null;
     imgCache.clear();
     setDlg.close();
     renderGate();
@@ -1906,6 +2143,54 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   });
   $("importBtn").addEventListener("click", () => $("importFile").click());
+
+  // Merge a backup into what's here: games match by name, mods match by address within a game.
+  function importData(parsed) {
+    const d = normalizeData(parsed);
+    function mergeTags(rawTags, gid) {
+      const map = new Map(), list = tagList(gid);
+      for (const t of rawTags) {
+        let m = list.find((x) => x.name.toLowerCase() === t.name.toLowerCase());
+        if (!m) { m = { id: newId(), name: t.name, color: t.color }; list.push(m); }
+        map.set(t.id, m.id);
+      }
+      return map;
+    }
+    const gameMap = new Map(), tagMaps = new Map();
+    let gAdded = 0;
+    for (const rg of d.games) {
+      let g = state.games.find((x) => x.name.toLowerCase() === rg.name.toLowerCase());
+      if (!g) { g = { id: newId(), name: rg.name.slice(0, 80), image: rg.image, tags: [], createdAt: rg.createdAt || Date.now() }; state.games.push(g); gAdded++; }
+      gameMap.set(rg.id, g.id);
+      tagMaps.set(rg.id, mergeTags(rg.tags, g.id));
+    }
+    const looseMap = mergeTags(d.looseTags, null);
+    const colMap = new Map(d.collections.map((c) => [c.id, newId()]));
+    const mapScope = (s) => (isColScope(s) ? (colMap.has(s.slice(4)) ? "col:" + colMap.get(s.slice(4)) : null) : gameMap.get(s) || null);
+    const modMap = new Map(), created = [];
+    for (const rm of d.mods) {
+      const sc = mapScope(rm.scope);
+      if (!sc) continue;
+      const ex = state.mods.find((x) => x.scope === sc && x.url === rm.url);
+      if (ex) { modMap.set(rm.id, ex.id); continue; }
+      const tm = (isColScope(rm.scope) ? looseMap : tagMaps.get(rm.scope)) || new Map();
+      const nm = { ...rm, id: newId(), scope: sc, tags: rm.tags.map((t) => tm.get(t)).filter(Boolean), requires: rm.requires.map((r) => ({ ...r })) };
+      state.mods.push(nm); created.push(nm); modMap.set(rm.id, nm.id);
+    }
+    for (const nm of created) nm.requires = nm.requires.map((r) => ({ id: modMap.get(r.id) || r.id, name: r.name }));
+    let n = 0, firstId = null;
+    for (const rc of d.collections) {
+      let icon = "";
+      try { icon = rc.iconSvg ? cleanSvg(rc.iconSvg) : ""; } catch (e) {}
+      const col = { ...rc, id: colMap.get(rc.id), name: rc.name.slice(0, 60), gameId: rc.gameId ? gameMap.get(rc.gameId) || null : null, iconSvg: icon,
+        items: dedupeItems(rc.items.map((i) => ({ ...i, modId: modMap.get(i.modId) }))), updatedAt: Date.now() };
+      state.collections.push(col);
+      firstId = firstId || col.id;
+      n++;
+    }
+    if (!state.settings.myAuthor && d.settings.myAuthor) state.settings.myAuthor = d.settings.myAuthor.slice(0, 120);
+    return { n, gAdded, mods: created.length, firstId };
+  }
   $("importFile").addEventListener("change", (ev) => {
     const f = ev.target.files && ev.target.files[0];
     ev.target.value = "";
@@ -1914,67 +2199,13 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     r.onload = () => {
       let parsed;
       try { parsed = JSON.parse(String(r.result)); } catch (e) { toast("That file isn't a Loot Ledger backup."); return; }
-      const cols = Array.isArray(parsed && parsed.collections) ? parsed.collections : null;
-      if (!cols) { toast("That file isn't a Loot Ledger backup."); return; }
-      // Map a backup's tags into a game's tag list by name.
-      function mergeTags(rawTags, gid) {
-        const map = new Map();
-        const list = tagList(gid);
-        for (const t of normTags(rawTags)) {
-          let m = list.find((x) => x.name.toLowerCase() === t.name.toLowerCase());
-          if (!m) { m = { id: newId(), name: t.name, color: t.color }; list.push(m); }
-          map.set(t.id, m.id);
-        }
-        return map;
-      }
-      const gameMap = new Map(), tagMaps = new Map();
-      let gAdded = 0;
-      for (const raw of Array.isArray(parsed.games) ? parsed.games : []) {
-        if (!raw || typeof raw.name !== "string" || !raw.id) continue;
-        let g = state.games.find((x) => x.name.toLowerCase() === raw.name.toLowerCase());
-        if (!g) {
-          const keepPic = raw.image && typeof raw.image.path === "string" ? { path: raw.image.path, sha: String(raw.image.sha || "") } : null;
-          g = { id: newId(), name: raw.name.slice(0, 80), image: keepPic, tags: [], createdAt: Number(raw.createdAt) || Date.now() };
-          state.games.push(g); gAdded++;
-        }
-        gameMap.set(String(raw.id), g.id);
-        tagMaps.set(String(raw.id), mergeTags(raw.tags, g.id));
-      }
-      const looseMap = mergeTags(parsed.looseTags, null);
-      const linkIdMap = new Map(), importedLinks = [];
-      let n = 0, firstId = null;
-      for (const raw of cols) {
-        if (!raw || typeof raw.name !== "string") continue;
-        let icon = "";
-        try { icon = raw.iconSvg ? cleanSvg(raw.iconSvg) : ""; } catch (e) {}
-        const newGid = raw.gameId ? gameMap.get(String(raw.gameId)) || null : null;
-        const tmap = newGid ? tagMaps.get(String(raw.gameId)) : looseMap;
-        const links = (Array.isArray(raw.links) ? raw.links : []).map((l) => {
-          const url = normUrl(l && l.url); if (!url) return null;
-          const nl = { id: newId(), url, title: String(l.title || guessTitle(url)).slice(0, 200), author: String(l.author || "").slice(0, 80),
-            tags: (Array.isArray(l.tags) ? l.tags : []).map((t) => tmap && tmap.get(String(t))).filter(Boolean),
-            requires: normReq(l.requires),
-            note: String(l.note || "").slice(0, 600), addedAt: Number(l.addedAt) || Date.now() };
-          if (l.id) linkIdMap.set(String(l.id), nl.id);
-          importedLinks.push(nl);
-          return nl;
-        }).filter(Boolean);
-        const now = Date.now();
-        const col = { id: newId(), name: raw.name.slice(0, 60), gameId: newGid,
-          description: String(raw.description || "").slice(0, 500), iconSvg: icon,
-          color: COLORS.includes(raw.color) ? raw.color : "slate", links, createdAt: Number(raw.createdAt) || now, updatedAt: now };
-        state.collections.push(col);
-        firstId = firstId || col.id;
-        n++;
-      }
-      // Point imported requirements at the imported copies of those mods.
-      for (const nl of importedLinks) nl.requires = nl.requires.map((r) => ({ id: linkIdMap.get(r.id) || r.id, name: r.name }));
-      if (!state.settings.myAuthor && parsed.settings && parsed.settings.myAuthor) state.settings.myAuthor = String(parsed.settings.myAuthor).slice(0, 120);
-      if (!n && !gAdded) { toast("No collections found in that file."); return; }
+      if (!parsed || !Array.isArray(parsed.collections)) { toast("That file isn't a Loot Ledger backup."); return; }
+      const res = importData(parsed);
+      if (!res.n && !res.gAdded && !res.mods) { toast("Nothing new to import in that file."); return; }
       setDlg.close();
-      markDirty(`Import ${plural(n, "collection")}`);
-      go(firstId ? { type: "col", id: firstId } : { type: "home" });
-      toast(`Imported ${plural(n, "collection")}${gAdded ? ` and ${plural(gAdded, "game")}` : ""}`);
+      markDirty(`Import ${plural(res.n, "collection")}`);
+      go(res.firstId ? { type: "col", id: res.firstId } : { type: "home" });
+      toast(`Imported ${plural(res.n, "collection")}, ${plural(res.mods, "new mod")}${res.gAdded ? ` and ${plural(res.gAdded, "game")}` : ""}`);
     };
     r.readAsText(f);
   });
@@ -1986,12 +2217,13 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (anyDialogOpen()) return;
     const text = (ev.clipboardData && ev.clipboardData.getData("text")) || "";
     const url = normUrl(text.trim().split(/\s+/)[0]);
-    const urlIn = $("addUrl");
+    const urlIn = $("addUrl") || $("libUrl");
     if (!url || !urlIn || !urlIn.isConnected) return;
     ev.preventDefault();
     urlIn.value = url;
     urlIn.dispatchEvent(new Event("input"));
-    $("addTitle").focus();
+    const next = $("addTitle") || $("libTitle");
+    if (next) next.focus();
   });
 
   /* ===== boot ===== */
