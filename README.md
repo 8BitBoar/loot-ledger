@@ -1,76 +1,21 @@
 # Loot Ledger
 
-A personal link-collection page. Make collections with a name, description and a [game-icons.net](https://game-icons.net) icon, then add links from any website.
+A personal ledger for mod links. One place for everything from Nexus, Steam Workshop, GitHub, forums and wikis, organized by game.
 
-- **This repo (`loot-ledger`, public):** just the page. It contains no data.
-- **Data repo (`loot-ledger-data`, private):** holds `collections.json`. Every change you make on the page is saved there as a commit, so you get full history for free.
-- **Your token:** lets the page read and write the private data repo. It is stored only in the browser you paste it into.
+**https://8bitboar.github.io/loot-ledger/**
 
-Live page (after setup): **https://8bitboar.github.io/loot-ledger/**
+## What it does
 
----
+- **Games** with their own pictures, and **collections** of links inside each game
+- **Collection icons** from [game-icons.net](https://game-icons.net), in a color of your choice
+- **Links** with a title, author, tags and notes
+- **Per-game tags** with custom colors; each game's tags are separate
+- **Mine** badge and **My uploads** page for mods you authored
+- **Filtering** by tag, author, Mine, or search, inside a collection or across a whole game
+- **Bookmark button** that adds the page you're on, and fills in the author on Nexus mod pages
 
-## One-time setup
+## How it's built
 
-### 1. Create the private data repo
-1. Go to https://github.com/new
-2. Repository name: `loot-ledger-data`
-3. Choose **Private**.
-4. Tick **Add a README file** (the repo needs at least one commit).
-5. Click **Create repository**. You don't need to add anything else; the page creates `collections.json` on your first save.
+This repo holds only the page. Data lives in a separate private repo (`loot-ledger-data`): collections in `collections.json` and game pictures in `images/`. The page reads and writes that repo through the GitHub API using a fine-grained token that only has access to it. The token stays in the browser it's entered in.
 
-### 2. Create the public app repo and upload the page
-1. Go to https://github.com/new
-2. Repository name: `loot-ledger`
-3. Choose **Public** (free GitHub Pages only works from public repos; there's no data in it).
-4. Click **Create repository**.
-5. Click **uploading an existing file**, drag in `index.html` and this `README.md`, then **Commit changes**.
-
-### 3. Turn on GitHub Pages for the app repo
-1. In `loot-ledger`, open **Settings → Pages**.
-2. Under **Build and deployment → Source**, pick **Deploy from a branch**.
-3. Branch: **main**, folder: **/ (root)**. Click **Save**.
-4. Wait a minute or two. The page appears at https://8bitboar.github.io/loot-ledger/
-
-### 4. Create a token for the data repo
-1. Go to https://github.com/settings/personal-access-tokens/new (Settings → Developer settings → Personal access tokens → Fine-grained tokens).
-2. **Token name:** `Loot Ledger`
-3. **Expiration:** your choice. When it expires, make a new one and paste it in again.
-4. **Repository access:** **Only select repositories** → choose `loot-ledger-data` only.
-5. **Permissions → Repository permissions → Contents:** **Read and write**. (Metadata: Read-only is added automatically.) Leave everything else as No access.
-6. Click **Generate token** and copy it. GitHub only shows it once.
-
-### 5. Connect
-Open https://8bitboar.github.io/loot-ledger/, paste the token, and click **Connect**. Done.
-
-On each new computer, open the same address and paste the token once. If you lose the token, generate a new one; your data is unaffected.
-
----
-
-## Using it
-
-- **My games:** the home view. Add a game with **+ New game**, give it a name and a picture (box art, a screenshot, anything). Pictures are resized and stored in the `images/` folder of your data repo.
-- **Game pages:** click a game to see its banner and all its collections, and to add a collection straight to it.
-- **New collection:** name, game (pick from the dropdown, or "+ New game…" to add one on the spot), description, icon and icon color. Change a collection's game any time with **Edit**.
-- **Deleting a game** keeps its collections; they move to "No game".
-- **Author:** every link has an optional Author field, shown as "by Name". Click a name to see only that author's links. The bookmark button fills it in automatically on Nexus mod pages when it can.
-- **Your uploads:** in **Settings**, set **Your author name** (commas for more than one). Links by you get a **Mine** badge, a **Mine** filter appears, and **My uploads** in the sidebar lists all of them across every game.
-- **Tags:** type a tag in the Tags box and press Enter. Each game has its own tags, so `medieval` in one game is separate from `medieval` in another. Collections without a game share one tag list.
-- **Tag colors and cleanup:** **Tags** on a game page (or **Manage tags** above any link list) lets you recolor, rename or delete tags.
-- **Filtering:** click tags (several at once narrows further), **Mine**, or an author's name. The **Find links** box on a game page searches across all of that game's collections.
-- **Icons:** on game-icons.net open an icon, click **Download SVG**, then **Upload .svg** in the collection editor (or paste the SVG code). The default black background is removed automatically.
-- **Add links:** paste a URL into the collection, with an optional title and note. Or paste anywhere on the page outside a text box.
-- **Add from any website:** open **Settings** and drag the **+ Loot Ledger** button to your bookmarks bar. On any page, click it; Loot Ledger opens with that page ready to add. Pick a collection, add tags if you like, and click **Add to collection**. If the page updates, drag the button in again to get the newest version.
-- **Saving:** automatic. The dot next to the title shows the state. Changes are batched into one commit about a second after you stop editing.
-- **Another computer:** switching back to the tab picks up changes made elsewhere. If two computers edit at the same moment, the last save wins.
-- **Backups:** every save is a commit in `loot-ledger-data`, so you can restore any old version from its history on GitHub. **Settings → Download backup** also saves a JSON copy, and **Import backup** loads one.
-
-## Safety notes
-
-- The token only works on `loot-ledger-data`, so even if it leaked, it couldn't touch your other repos or your account.
-- Use **Settings → Forget token on this computer** on shared or public computers.
-- To revoke access everywhere, delete the token at https://github.com/settings/personal-access-tokens
-
-## Changing names
-
-If you rename the data repo or your username changes, type the new names on the connect screen. To change the defaults, edit `DEFAULTS` near the top of the script in `index.html`.
+Every change is a commit to the data repo, so the full history is there to restore from.
