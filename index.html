@@ -188,6 +188,23 @@ button.tag[aria-pressed="true"] { background: var(--c); color: var(--surface); b
 .tag-editor:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
 .tag-editor input { border: 0; background: transparent; flex: 1 1 120px; min-width: 80px; padding: 4px; outline: none; }
 .filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* Requires */
+.req-editor { position: relative; min-width: 0; }
+.tag.req-chip { --c: var(--accent); }
+.tag.req-chip.gone { --c: var(--c-slate); text-decoration: line-through; }
+.req-pop { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); max-height: 260px; overflow-y: auto; display: grid; padding: 4px; }
+.req-opt { display: grid; text-align: left; padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
+.req-opt.on, .req-opt:hover { background: var(--sunk); }
+.req-opt .ro-t { font-weight: 700; overflow-wrap: anywhere; }
+.req-opt .ro-c { font-size: .76rem; color: var(--muted); }
+.req-empty { padding: 8px; font-size: .84rem; color: var(--muted); }
+.reqs { display: flex; flex-wrap: wrap; gap: 3px 12px; align-items: baseline; font-size: .86rem; min-width: 0; }
+.req-label { font-family: var(--f-mono); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+a.req { color: var(--ink); text-decoration: none; border-bottom: 1px dotted var(--muted); overflow-wrap: anywhere; }
+a.req:hover { color: var(--accent); border-bottom-color: var(--accent); }
+a.req.soft { color: var(--muted); }
+.req.gone { color: var(--muted); font-style: italic; text-decoration: line-through; }
 .filters .sep { flex: 1 1 auto; }
 
 .tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -633,6 +650,87 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     };
   }
 
+  /* ===== requires: links point at other links in the same game ===== */
+  const idxCache = new Map();
+  function gameIndex(gid) {
+    const key = gid || NO_GAME;
+    if (idxCache.has(key)) return idxCache.get(key);
+    const byId = new Map(), neededBy = new Map();
+    for (const c of colsOf(key)) for (const l of c.links || []) byId.set(l.id, { l, c });
+    for (const { l } of byId.values()) for (const r of l.requires || []) {
+      if (!byId.has(r.id) || r.id === l.id) continue;
+      if (!neededBy.has(r.id)) neededBy.set(r.id, []);
+      if (!neededBy.get(r.id).includes(l.id)) neededBy.get(r.id).push(l.id);
+    }
+    const v = { byId, neededBy };
+    idxCache.set(key, v);
+    return v;
+  }
+  const linkLabel = (l) => l.title || l.url;
+
+  /* Picker: type part of a mod's name; a list of that game's mods appears to choose from. */
+  function requiresEditor(gid, selfId, initial, idPrefix) {
+    const items = (initial || []).map((r) => ({ ...r }));
+    let matches = [], active = 0;
+    const input = h("input", { id: idPrefix, placeholder: "Requires… type a mod name", "aria-label": "Requires", autocomplete: "off", maxlength: "200",
+      role: "combobox", "aria-autocomplete": "list", "aria-expanded": "false" });
+    const box = h("div", { class: "tag-editor", onclick: (e) => { if (e.target === box) input.focus(); } });
+    const pop = h("div", { class: "req-pop", role: "listbox", hidden: true });
+    const wrap = h("div", { class: "req-editor" }, box, pop);
+    const hitOf = (r) => { const x = gameIndex(gid).byId.get(r.id); return x && x.l.id !== selfId ? x : null; };
+    function draw() {
+      box.replaceChildren(...items.map((r, i) => {
+        const hit = hitOf(r);
+        const chip = h("span", { class: "tag req-chip" + (hit ? "" : " gone"), title: hit ? `In ${hit.c.name}` : "No longer in this game's ledger" },
+          hit ? linkLabel(hit.l) : r.name,
+          h("button", { class: "x", type: "button", "aria-label": "Remove requirement", onclick: (e) => { e.preventDefault(); e.stopPropagation(); items.splice(i, 1); draw(); input.focus(); } }, "×"));
+        return chip;
+      }), input);
+    }
+    function close() { pop.hidden = true; input.setAttribute("aria-expanded", "false"); matches = []; }
+    function search() {
+      const q = input.value.trim().toLowerCase();
+      if (!q) { close(); return; }
+      const taken = new Set(items.map((r) => r.id));
+      matches = [...gameIndex(gid).byId.values()]
+        .filter(({ l }) => l.id !== selfId && !taken.has(l.id) && [l.title, l.author, l.url].some((s) => (s || "").toLowerCase().includes(q)))
+        .sort((a, b) => {
+          const as = (a.l.title || "").toLowerCase().startsWith(q), bs = (b.l.title || "").toLowerCase().startsWith(q);
+          return (bs - as) || linkLabel(a.l).localeCompare(linkLabel(b.l), undefined, { sensitivity: "base" });
+        }).slice(0, 8);
+      active = 0;
+      drawPop();
+    }
+    function drawPop() {
+      const g = gid ? getGame(gid) : null;
+      pop.replaceChildren(...(matches.length
+        ? matches.map((m, i) => h("button", { type: "button", class: "req-opt" + (i === active ? " on" : ""), role: "option", "aria-selected": String(i === active),
+            onmousedown: (e) => e.preventDefault(), onclick: () => pick(m) },
+            h("span", { class: "ro-t", text: linkLabel(m.l) }),
+            h("span", { class: "ro-c", text: m.c.name + (m.l.author ? " · by " + m.l.author : "") })))
+        : [h("div", { class: "req-empty", text: `No saved mods in ${g ? g.name : "this group"} match “${input.value.trim()}”. Add that mod to a collection first.` })]));
+      pop.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+    }
+    function pick(m) { items.push({ id: m.l.id, name: linkLabel(m.l) }); input.value = ""; close(); draw(); input.focus(); }
+    input.addEventListener("input", search);
+    input.addEventListener("focus", () => { if (input.value.trim()) search(); });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown" && matches.length) { e.preventDefault(); active = (active + 1) % matches.length; drawPop(); }
+      else if (e.key === "ArrowUp" && matches.length) { e.preventDefault(); active = (active - 1 + matches.length) % matches.length; drawPop(); }
+      else if (e.key === "Enter" && input.value.trim()) { e.preventDefault(); if (matches[active]) pick(matches[active]); }
+      else if (e.key === "Escape" && !pop.hidden) { e.preventDefault(); e.stopPropagation(); close(); }
+      else if (e.key === "Backspace" && !input.value && items.length) { items.pop(); draw(); input.focus(); }
+    });
+    input.addEventListener("blur", () => setTimeout(close, 150));
+    draw();
+    return {
+      el: wrap,
+      get() { return items.map((r) => { const hit = hitOf(r); return { id: r.id, name: (hit ? linkLabel(hit.l) : r.name).slice(0, 200) }; }); },
+      reset() { items.length = 0; input.value = ""; close(); draw(); },
+    };
+  }
+
   /* ===== authors ===== */
   const myNames = () => (state.settings.myAuthor || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   const isMine = (l) => !!(l.author && myNames().includes(l.author.trim().toLowerCase()));
@@ -647,7 +745,8 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     const q = state.filter.trim().toLowerCase();
     if (q) {
       const names = (l.tags || []).map((id) => (tagById(gid, id) || {}).name || "");
-      if (![l.title, l.url, l.note, l.author, ...names].some((s) => (s || "").toLowerCase().includes(q))) return false;
+      const reqNames = (l.requires || []).map((r) => r.name);
+      if (![l.title, l.url, l.note, l.author, ...names, ...reqNames].some((s) => (s || "").toLowerCase().includes(q))) return false;
     }
     return true;
   }
@@ -751,6 +850,9 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   function serialize() {
     return JSON.stringify({ app: "loot-ledger", version: 3, settings: state.settings, games: state.games, looseTags: state.looseTags, collections: state.collections }, null, 2) + "\n";
   }
+  // A requirement points at another link in the same game by id; the name is kept as a fallback label.
+  const normReq = (arr) => (Array.isArray(arr) ? arr : []).filter((r) => r && r.id && typeof r.name === "string")
+    .map((r) => ({ id: String(r.id), name: r.name.slice(0, 200) }));
   const normTags = (arr) => (Array.isArray(arr) ? arr : []).filter((t) => t && t.id && typeof t.name === "string" && t.name.trim())
     .map((t) => ({ id: String(t.id), name: t.name.trim().slice(0, 40), color: TAG_COLORS.includes(t.color) ? t.color : "slate" }));
   function applyData(data) {
@@ -770,7 +872,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       color: COLORS.includes(c.color) ? c.color : "slate",
       links: (Array.isArray(c.links) ? c.links : []).filter((l) => l && normUrl(l.url)).map((l) => ({
         id: String(l.id || newId()), url: normUrl(l.url), title: l.title || "", author: String(l.author || ""),
-        tags: Array.isArray(l.tags) ? l.tags.map(String) : [], note: l.note || "", addedAt: Number(l.addedAt) || 0,
+        tags: Array.isArray(l.tags) ? l.tags.map(String) : [], requires: normReq(l.requires), note: l.note || "", addedAt: Number(l.addedAt) || 0,
       })),
       createdAt: Number(c.createdAt) || 0, updatedAt: Number(c.updatedAt) || 0,
     }));
@@ -1022,6 +1124,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
 
   function render() {
     if (!state.connected) return;
+    idxCache.clear();
     const v = state.view;
     if (v.type === "col" && !getCol(v.id)) state.view = { type: "home" };
     if (v.type === "game" && !getGame(v.id)) state.view = { type: "home" };
@@ -1190,8 +1293,8 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (last && getCol(last)) sel.value = last;
     else if (state.view.type === "col" && getCol(state.view.id)) sel.value = state.view.id;
     if (!state.collections.length) sel.value = "__new";
-    const tagSlot = h("div");
-    let editor = null, editorGid;
+    const tagSlot = h("div"), reqSlot = h("div");
+    let editor = null, reqEd = null, editorGid;
     function swapEditor() {
       const gid = sel.value && sel.value !== "__new" ? gidOf(getCol(sel.value)) : null;
       if (editor && gid === editorGid) return;
@@ -1199,6 +1302,9 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       editor = tagEditor(gid, [], "qTags"); editorGid = gid;
       names.forEach((n) => editor.addName(n));
       tagSlot.replaceChildren(editor.el);
+      // Requirements belong to one game, so switching games starts the list fresh.
+      reqEd = requiresEditor(gid, null, [], "qReqs");
+      reqSlot.replaceChildren(reqEd.el);
     }
     swapEditor();
     sel.addEventListener("change", swapEditor);
@@ -1207,6 +1313,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       h("div", { class: "add-label", text: "Add this page" }),
       h("div", { class: "row2" }, titleIn, sel),
       h("div", { class: "add-row2" }, authorIn, tagSlot),
+      reqSlot,
       urlIn, noteIn, err,
       h("div", { class: "dlg-foot", style: "justify-content:flex-start" },
         h("button", { class: "btn primary", type: "submit" }, "Add to collection"),
@@ -1224,9 +1331,10 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       if (!c) return;
       swapEditor();
       const tags = editor.commit();
+      const requires = reqEd.get();
       store.set("ll.lastQuick", c.id);
       state.quick = null;
-      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags, note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
+      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags, requires, note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
       panelBuiltFor = null;
       go({ type: "col", id: c.id });
       afterSaveQueue(() => toast(`Saved to ${c.name}. You can close this tab.`));
@@ -1253,12 +1361,14 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     const titleIn = h("input", { class: "field", id: "addTitle", placeholder: "Title (optional)", maxlength: "200", "aria-label": "Link title" });
     const authorIn = h("input", { class: "field", id: "addAuthor", placeholder: "Author (optional)", maxlength: "80", "aria-label": "Author" });
     const editor = tagEditor(gid, [], "addTags");
-    const noteIn = h("input", { class: "field", id: "addNote", placeholder: "Note (optional), e.g. needs SKSE, install after USSEP", maxlength: "600", "aria-label": "Note" });
+    const reqEd = requiresEditor(gid, null, [], "addReqs");
+    const noteIn = h("input", { class: "field", id: "addNote", placeholder: "Note (optional), e.g. install after USSEP", maxlength: "600", "aria-label": "Note" });
     const err = h("div", { class: "err", hidden: true });
     const form = h("form", { class: "card add", id: "addForm" },
       h("div", { class: "add-label", text: "Add a link" }),
       h("div", { class: "add-row" }, urlIn, titleIn, h("button", { class: "btn primary", type: "submit" }, "Add")),
       h("div", { class: "add-row2" }, authorIn, editor.el),
+      reqEd.el,
       noteIn, err,
       h("div", { class: "hint", text: "Tags: type and press Enter. Tip: paste a link anywhere on this page outside a text box and it lands here." }));
     urlIn.addEventListener("input", () => { const u = normUrl(urlIn.value); titleIn.placeholder = u ? guessTitle(u) : "Title (optional)"; err.hidden = true; });
@@ -1270,9 +1380,10 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       if (!c) return;
       const dupe = (c.links || []).some((l) => l.url === url);
       const tags = editor.commit();
-      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags, note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
+      const requires = reqEd.get();
+      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags, requires, note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
       urlIn.value = ""; titleIn.value = ""; noteIn.value = ""; authorIn.value = ""; titleIn.placeholder = "Title (optional)";
-      editor.reset();
+      editor.reset(); reqEd.reset();
       toast(dupe ? "Added. That link was already in this collection." : "Link added");
       urlIn.focus();
     });
@@ -1332,6 +1443,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
 
   function renderLinks(col, syncSearch) {
     if (!col || !listEl) return;
+    idxCache.clear();
     if (syncSearch && colSearch) colSearch.value = state.filter;
     const all = (col.links || []).length;
     const links = sortedLinks(col);
@@ -1374,6 +1486,14 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       h("option", { value: "" }, "Move to…"), ...opts2) : null;
     const tags = (l.tags || []).map((id) => tagById(gid, id)).filter(Boolean).sort(byName);
     const author = (l.author || "").trim();
+    const idx = gameIndex(gid);
+    const reqEls = (l.requires || []).filter((r) => r.id !== l.id).map((r) => {
+      const hit = idx.byId.get(r.id);
+      return hit
+        ? h("a", { class: "req", href: hit.l.url, target: "_blank", rel: "noopener noreferrer", title: `Open ${linkLabel(hit.l)} (in ${hit.c.name})` }, linkLabel(hit.l))
+        : h("span", { class: "req gone", title: "This mod is no longer in this game's ledger", text: r.name });
+    });
+    const neededBy = (idx.neededBy.get(l.id) || []).map((id) => idx.byId.get(id)).filter(Boolean);
     return h("li", { class: "link" },
       h("div", { style: "min-width:0;display:grid;gap:3px" },
         opts.showCol ? h("button", { class: "col-label", type: "button", onclick: () => go({ type: "col", id: col.id }) }, tile(col, "sm"), col.name) : null,
@@ -1384,6 +1504,9 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
         author || tags.length ? h("div", { class: "line1" },
           author ? h("span", { class: "by" }, "by ", state.view.type === "mine" ? h("b", { text: author }) : h("button", { type: "button", title: "Show links by " + author, onclick: () => onAuthorClick(author) }, author)) : null,
           tags.length ? h("span", { class: "tags" }, tags.map((t) => tagChip(t, { pressed: state.view.type !== "mine" ? state.tagFilter.has(t.id) : null, title: "Filter by " + t.name, onclick: () => onTagClick(col, t) }))) : null) : null,
+        reqEls.length ? h("div", { class: "reqs" }, h("span", { class: "req-label", text: "Requires" }), ...reqEls) : null,
+        neededBy.length ? h("div", { class: "reqs" }, h("span", { class: "req-label", text: "Needed by" }),
+          ...neededBy.map((x) => h("a", { class: "req soft", href: x.l.url, target: "_blank", rel: "noopener noreferrer", title: `Open ${linkLabel(x.l)} (in ${x.c.name})` }, linkLabel(x.l)))) : null,
         h("div", { class: "url", text: l.url }),
         l.note ? h("p", { class: "note", text: l.note }) : null,
         l.addedAt ? h("div", { class: "added", text: "Added " + fmtDate(l.addedAt) }) : null),
@@ -1409,9 +1532,10 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     const ttlIn = h("input", { class: "field", id: "editTitle", maxlength: "200", "aria-label": "Title", placeholder: "Title" }); ttlIn.value = l.title || "";
     const authorIn = h("input", { class: "field", id: "editAuthor", maxlength: "80", "aria-label": "Author", placeholder: "Author" }); authorIn.value = l.author || "";
     const editor = tagEditor(gid, l.tags || [], "editTags");
+    const reqEd = requiresEditor(gid, l.id, l.requires || [], "editReqs");
     const noteIn = h("textarea", { class: "field", id: "editNote", rows: "2", maxlength: "600", "aria-label": "Note", placeholder: "Note" }); noteIn.value = l.note || "";
     const err = h("div", { class: "err", hidden: true });
-    const form = h("form", { class: "link-edit" }, urlIn, ttlIn, h("div", { class: "add-row2" }, authorIn, editor.el), noteIn, err,
+    const form = h("form", { class: "link-edit" }, urlIn, ttlIn, h("div", { class: "add-row2" }, authorIn, editor.el), reqEd.el, noteIn, err,
       h("div", { class: "row" },
         h("button", { class: "btn", type: "button", onclick: () => { state.editingLinkId = null; render(); } }, "Cancel"),
         h("button", { class: "btn primary", type: "submit" }, "Save")));
@@ -1420,8 +1544,9 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       const url = normUrl(urlIn.value);
       if (!url) { err.textContent = "Enter a valid web address."; err.hidden = false; return; }
       const tags = editor.commit();
+      const requires = reqEd.get();
       state.editingLinkId = null;
-      mutateLinks(colId, (links) => { const x = links.find((y) => y.id === linkId); if (x) { x.url = url; x.title = ttlIn.value.trim() || guessTitle(url); x.author = authorIn.value.trim(); x.tags = tags; x.note = noteIn.value.trim(); } }, `Edit link in ${c.name}`);
+      mutateLinks(colId, (links) => { const x = links.find((y) => y.id === linkId); if (x) { x.url = url; x.title = ttlIn.value.trim() || guessTitle(url); x.author = authorIn.value.trim(); x.tags = tags; x.requires = requires; x.note = noteIn.value.trim(); } }, `Edit link in ${c.name}`);
       toast("Link saved");
     });
     li.replaceChildren(form);
@@ -1816,6 +1941,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
         tagMaps.set(String(raw.id), mergeTags(raw.tags, g.id));
       }
       const looseMap = mergeTags(parsed.looseTags, null);
+      const linkIdMap = new Map(), importedLinks = [];
       let n = 0, firstId = null;
       for (const raw of cols) {
         if (!raw || typeof raw.name !== "string") continue;
@@ -1825,9 +1951,13 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
         const tmap = newGid ? tagMaps.get(String(raw.gameId)) : looseMap;
         const links = (Array.isArray(raw.links) ? raw.links : []).map((l) => {
           const url = normUrl(l && l.url); if (!url) return null;
-          return { id: newId(), url, title: String(l.title || guessTitle(url)).slice(0, 200), author: String(l.author || "").slice(0, 80),
+          const nl = { id: newId(), url, title: String(l.title || guessTitle(url)).slice(0, 200), author: String(l.author || "").slice(0, 80),
             tags: (Array.isArray(l.tags) ? l.tags : []).map((t) => tmap && tmap.get(String(t))).filter(Boolean),
+            requires: normReq(l.requires),
             note: String(l.note || "").slice(0, 600), addedAt: Number(l.addedAt) || Date.now() };
+          if (l.id) linkIdMap.set(String(l.id), nl.id);
+          importedLinks.push(nl);
+          return nl;
         }).filter(Boolean);
         const now = Date.now();
         const col = { id: newId(), name: raw.name.slice(0, 60), gameId: newGid,
@@ -1837,6 +1967,8 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
         firstId = firstId || col.id;
         n++;
       }
+      // Point imported requirements at the imported copies of those mods.
+      for (const nl of importedLinks) nl.requires = nl.requires.map((r) => ({ id: linkIdMap.get(r.id) || r.id, name: r.name }));
       if (!state.settings.myAuthor && parsed.settings && parsed.settings.myAuthor) state.settings.myAuthor = String(parsed.settings.myAuthor).slice(0, 120);
       if (!n && !gAdded) { toast("No collections found in that file."); return; }
       setDlg.close();

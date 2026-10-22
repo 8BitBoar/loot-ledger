@@ -10,6 +10,7 @@ A personal ledger for mod links. One place for everything from Nexus, Steam Work
 - **Collection icons** from [game-icons.net](https://game-icons.net), in a color of your choice
 - **Links** with a title, author, tags and notes
 - **Per-game tags** with custom colors; each game's tags are separate
+- **Requirements** between mods in the same game, with a "Needed by" list on each required mod
 - **Mine** badge and **My uploads** page for mods you authored
 - **Filtering** by tag, author, Mine, or search, inside a collection or across a whole game
 - **Bookmark button** that adds the page you're on, and fills in the author on Nexus mod pages
