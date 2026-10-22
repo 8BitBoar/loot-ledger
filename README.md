@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/33834650/README.md)
 # Loot Ledger
 
 A personal link-collection page. Make collections with a name, description and a [game-icons.net](https://game-icons.net) icon, then add links from any website.
@@ -50,10 +49,18 @@ On each new computer, open the same address and paste the token once. If you los
 
 ## Using it
 
-- **New collection:** name, description, icon and icon color.
+- **My games:** the home view. Add a game with **+ New game**, give it a name and a picture (box art, a screenshot, anything). Pictures are resized and stored in the `images/` folder of your data repo.
+- **Game pages:** click a game to see its banner and all its collections, and to add a collection straight to it.
+- **New collection:** name, game (pick from the dropdown, or "+ New game…" to add one on the spot), description, icon and icon color. Change a collection's game any time with **Edit**.
+- **Deleting a game** keeps its collections; they move to "No game".
+- **Author:** every link has an optional Author field, shown as "by Name". Click a name to see only that author's links. The bookmark button fills it in automatically on Nexus mod pages when it can.
+- **Your uploads:** in **Settings**, set **Your author name** (commas for more than one). Links by you get a **Mine** badge, a **Mine** filter appears, and **My uploads** in the sidebar lists all of them across every game.
+- **Tags:** type a tag in the Tags box and press Enter. Each game has its own tags, so `medieval` in one game is separate from `medieval` in another. Collections without a game share one tag list.
+- **Tag colors and cleanup:** **Tags** on a game page (or **Manage tags** above any link list) lets you recolor, rename or delete tags.
+- **Filtering:** click tags (several at once narrows further), **Mine**, or an author's name. The **Find links** box on a game page searches across all of that game's collections.
 - **Icons:** on game-icons.net open an icon, click **Download SVG**, then **Upload .svg** in the collection editor (or paste the SVG code). The default black background is removed automatically.
 - **Add links:** paste a URL into the collection, with an optional title and note. Or paste anywhere on the page outside a text box.
-- **Add from any website:** open **Settings** and drag the **+ Loot Ledger** button to your bookmarks bar. On any page, click it; Loot Ledger opens with that page ready to add. Pick a collection and click **Add to collection**.
+- **Add from any website:** open **Settings** and drag the **+ Loot Ledger** button to your bookmarks bar. On any page, click it; Loot Ledger opens with that page ready to add. Pick a collection, add tags if you like, and click **Add to collection**. If the page updates, drag the button in again to get the newest version.
 - **Saving:** automatic. The dot next to the title shows the state. Changes are batched into one commit about a second after you stop editing.
 - **Another computer:** switching back to the tab picks up changes made elsewhere. If two computers edit at the same moment, the last save wins.
 - **Backups:** every save is a commit in `loot-ledger-data`, so you can restore any old version from its history on GitHub. **Settings → Download backup** also saves a JSON copy, and **Import backup** loads one.

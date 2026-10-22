@@ -9,12 +9,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: a ledger app. Shelf on the left (My games, then collections grouped by game), the open view on the right; the shelf stacks above on phones. */
+/* Layout: a ledger app. Shelf on the left (My games, My uploads, then collections grouped by game), the open view on the right; the shelf stacks above on phones. */
 :root {
   --bg: #e9ece6; --surface: #f7f8f4; --sunk: #dfe3db; --ink: #1d2320; --muted: #5c665f;
   --line: #c9cfc4; --accent: #2f4f7f; --accent-ink: #ffffff; --danger: #a23a2a; --ok: #3f6b2a; --warn: #8a6115; --focus: #2f4f7f;
   --c-brass: #9a6f22; --c-lapis: #2f5a9a; --c-moss: #4d6f2e; --c-garnet: #9b2f3a; --c-amethyst: #6b4699; --c-slate: #4d5a63;
-  --shade: rgba(16, 20, 18, .62);
+  --c-teal: #1f6f6b; --c-rust: #a4501f; --c-rose: #a83f73; --c-olive: #6b6a1f;
   --f-display: "Spectral SC", "Palatino Linotype", Georgia, serif;
   --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
@@ -25,7 +25,7 @@
     --bg: #131816; --surface: #1b2220; --sunk: #232b28; --ink: #e3e8e2; --muted: #9aa59d;
     --line: #333d39; --accent: #8fb0e3; --accent-ink: #0f1a2b; --danger: #ef8a78; --ok: #98c06a; --warn: #d9ac5a; --focus: #8fb0e3;
     --c-brass: #d9ac5a; --c-lapis: #7fa6e6; --c-moss: #98c06a; --c-garnet: #e37d88; --c-amethyst: #b597e6; --c-slate: #a2b1bb;
-    --shade: rgba(0, 0, 0, .66);
+    --c-teal: #5fc4bc; --c-rust: #e8925a; --c-rose: #e88ab8; --c-olive: #c4c25f;
     color-scheme: dark;
   }
 }
@@ -65,6 +65,8 @@ a { color: var(--accent); }
 .btn.ghost:hover { color: var(--ink); background: var(--sunk); }
 .btn.danger { color: var(--danger); }
 .btn.danger.armed { background: var(--danger); color: var(--surface); border-color: var(--danger); }
+.btn.sm { padding: 4px 9px; font-size: .82rem; }
+.btn.toggle[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .btn[disabled] { opacity: .5; cursor: default; }
 
 .layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; align-items: start; }
@@ -76,6 +78,7 @@ a { color: var(--accent); }
 .home-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; font-family: var(--f-display); font-size: 1.05rem; letter-spacing: .04em; text-align: left; }
 .home-btn:hover { background: var(--sunk); }
 .home-btn[aria-current="true"] { background: var(--sunk); border-color: var(--line); }
+.shelf-top { display: grid; gap: 2px; }
 .groups { display: grid; gap: 10px; }
 .group { display: grid; gap: 1px; }
 .group-head { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; text-align: left; }
@@ -83,7 +86,7 @@ a { color: var(--accent); }
 .group-head[aria-current="true"] { background: var(--sunk); border-color: var(--line); }
 .group-head .gn { font-family: var(--f-display); font-weight: 600; font-size: .98rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .group-label { font-family: var(--f-display); font-size: .9rem; letter-spacing: .06em; color: var(--muted); padding: 4px 8px 2px; }
-.col-list { list-style: none; margin: 0; padding: 0 0 0 14px; display: grid; gap: 1px; border-left: 1px solid var(--line); margin-left: 30px; }
+.col-list { list-style: none; margin: 0 0 0 30px; padding: 0 0 0 14px; display: grid; gap: 1px; border-left: 1px solid var(--line); }
 .group.loose .col-list { margin-left: 8px; padding-left: 0; border-left: 0; }
 .col-item button { width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 4px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; text-align: left; }
 .col-item button:hover { background: var(--sunk); }
@@ -119,9 +122,8 @@ a { color: var(--accent); }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-width: 0; }
 .view-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }
 .view-head h2 { font-family: var(--f-display); font-weight: 600; font-size: 1.75rem; line-height: 1.15; margin: 0; }
-.section-label { font-family: var(--f-display); font-size: 1.05rem; letter-spacing: .05em; color: var(--muted); margin: 6px 0 0; }
+.section-label { font-family: var(--f-display); font-size: 1.05rem; letter-spacing: .05em; color: var(--muted); margin: 6px 0 0; display: flex; align-items: center; gap: 8px; }
 
-/* Game cards */
 .game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
 .game-card { display: grid; grid-template-rows: auto 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; cursor: pointer; text-align: left; padding: 0; transition: transform .12s ease, border-color .12s ease; }
 .game-card:hover { transform: translateY(-2px); border-color: var(--muted); }
@@ -132,7 +134,6 @@ a { color: var(--accent); }
 .add-card:hover { border-color: var(--accent); color: var(--accent); }
 .add-card .plus { font-size: 1.8rem; line-height: 1; font-family: var(--f-display); }
 
-/* Game view */
 .game-hero { padding: 0; overflow: hidden; }
 .game-hero .info { padding: 16px 18px 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; }
 .game-hero h2 { font-family: var(--f-display); font-weight: 600; font-size: 2rem; line-height: 1.1; margin: 0; overflow-wrap: anywhere; text-wrap: balance; }
@@ -147,7 +148,6 @@ a { color: var(--accent); }
 .col-card .ccount { font-family: var(--f-mono); font-size: .74rem; color: var(--muted); margin-top: 4px; }
 .col-grid .add-card { min-height: 92px; }
 
-/* Collection view */
 .crumb { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); flex-wrap: wrap; }
 .crumb button { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font: inherit; display: inline-flex; align-items: center; gap: 6px; }
 .crumb button:hover { text-decoration: underline; }
@@ -162,7 +162,8 @@ a { color: var(--accent); }
 .add { display: grid; gap: 10px; }
 .add-label { font-family: var(--f-display); letter-spacing: .06em; font-size: .95rem; color: var(--muted); }
 .add-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr) auto; gap: 8px; }
-@media (max-width: 640px) { .add-row { grid-template-columns: minmax(0, 1fr); } }
+.add-row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }
+@media (max-width: 640px) { .add-row, .add-row2 { grid-template-columns: minmax(0, 1fr); } }
 .field { width: 100%; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
 .field:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
 .field.mono { font-family: var(--f-mono); font-size: .86rem; }
@@ -171,6 +172,20 @@ a { color: var(--accent); }
 .quick { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .quick .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 @media (max-width: 640px) { .quick .row2 { grid-template-columns: minmax(0, 1fr); } }
+
+/* Tags */
+.tag { --c: var(--c-slate); display: inline-flex; align-items: center; gap: 5px; font-size: .74rem; font-weight: 700; line-height: 1.5; padding: 1px 9px; border-radius: 999px; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); border: 1px solid color-mix(in srgb, var(--c) 38%, transparent); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+button.tag { cursor: pointer; font-family: inherit; }
+button.tag:hover { border-color: var(--c); }
+button.tag[aria-pressed="true"] { background: var(--c); color: var(--surface); border-color: var(--c); }
+.tag .tc { font-family: var(--f-mono); font-weight: 400; opacity: .8; }
+.tag .x { border: 0; background: none; color: inherit; cursor: pointer; padding: 0; font-size: .95rem; line-height: 1; }
+.tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.tag-editor { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); min-width: 0; }
+.tag-editor:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.tag-editor input { border: 0; background: transparent; flex: 1 1 120px; min-width: 80px; padding: 4px; outline: none; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.filters .sep { flex: 1 1 auto; }
 
 .tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tools .field { flex: 1 1 200px; }
@@ -186,6 +201,13 @@ a { color: var(--accent); }
 .chip.nexus { color: var(--c-brass); background: color-mix(in srgb, var(--c-brass) 14%, transparent); }
 .chip.steam { color: var(--c-lapis); background: color-mix(in srgb, var(--c-lapis) 14%, transparent); }
 .chip.github { color: var(--c-amethyst); background: color-mix(in srgb, var(--c-amethyst) 14%, transparent); }
+.mine { font-size: .66rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); white-space: nowrap; }
+.by { font-size: .86rem; color: var(--muted); }
+.by button { background: none; border: 0; padding: 0; color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+.by button:hover { color: var(--accent); text-decoration: underline; }
+.by b { color: var(--ink); }
+.col-label { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font: inherit; font-size: .78rem; display: inline-flex; align-items: center; gap: 6px; }
+.col-label:hover { text-decoration: underline; }
 .link .url { font-family: var(--f-mono); font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; }
 .link .note { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 70ch; }
 .link .added { font-family: var(--f-mono); font-size: .72rem; color: var(--muted); }
@@ -227,6 +249,18 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
 .kv dd { margin: 0; font-family: var(--f-mono); font-size: .84rem; overflow-wrap: anywhere; }
 .bm { display: inline-block; padding: 6px 12px; border: 1px dashed var(--accent); border-radius: 6px; font-weight: 700; text-decoration: none; cursor: grab; }
 
+/* Tag manager */
+.tm-list { display: grid; max-height: 52dvh; overflow-y: auto; }
+.tm-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; padding: 10px 0; border-top: 1px solid var(--line); align-items: center; }
+.tm-row:first-child { border-top: 0; }
+.tm-row .tm-name { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.tm-row .tm-name .field { padding: 5px 8px; }
+.tm-row .tm-side { display: flex; gap: 6px; align-items: center; }
+.dots { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+.dot { --c: var(--c-slate); width: 22px; height: 22px; border-radius: 50%; background: var(--c); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--line); cursor: pointer; padding: 0; }
+.dot[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
+.tm-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+
 .toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 8px; display: flex; gap: 12px; align-items: center; font-size: .9rem; max-width: calc(100vw - 32px); z-index: 20; }
 .toast button { background: transparent; border: 0; color: var(--bg); text-decoration: underline; cursor: pointer; font-weight: 700; padding: 0; }
 </style>
@@ -243,7 +277,10 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   </header>
   <div class="layout" id="layout" hidden>
     <aside class="shelf" aria-label="Games and collections">
-      <button class="home-btn" id="homeBtn" type="button"><span>My games</span><span class="ct" id="gameCount"></span></button>
+      <div class="shelf-top">
+        <button class="home-btn" id="homeBtn" type="button"><span>My games</span><span class="ct" id="gameCount"></span></button>
+        <button class="home-btn" id="mineBtn" type="button" hidden><span>My uploads</span><span class="ct" id="mineCount"></span></button>
+      </div>
       <div class="groups" id="groups"></div>
     </aside>
     <main class="panel" id="panel"></main>
@@ -314,16 +351,34 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   </form>
 </dialog>
 
+<dialog id="tagDialog">
+  <div class="dlg">
+    <h3 id="tmTitle">Tags</h3>
+    <div class="hint" id="tmHint"></div>
+    <div class="tm-list" id="tmList"></div>
+    <form class="tm-add" id="tmAdd">
+      <input class="field" id="tmNew" maxlength="40" placeholder="New tag name" aria-label="New tag name" autocomplete="off">
+      <button class="btn" type="submit">Add tag</button>
+    </form>
+    <div class="dlg-foot"><button class="btn primary" type="button" id="tmClose">Done</button></div>
+  </div>
+</dialog>
+
 <dialog id="setDialog">
   <div class="dlg">
     <h3>Settings</h3>
+    <form style="display:grid;gap:6px" id="authorForm">
+      <label class="lbl" for="sAuthor">Your author name</label>
+      <div class="hint">Links whose author matches get a "Mine" badge and show up under My uploads. Use commas for more than one name, e.g. 8BitBoar, BoarWorks.</div>
+      <div class="tm-add"><input class="field" id="sAuthor" maxlength="120" autocomplete="off"><button class="btn" type="submit">Save</button></div>
+    </form>
     <dl class="kv">
       <dt>Data repo</dt><dd><a id="sRepo" href="#" target="_blank" rel="noopener"></a></dd>
       <dt>File</dt><dd id="sFile"></dd>
     </dl>
     <div style="display:grid;gap:6px">
       <strong>Add-from-any-page button</strong>
-      <div class="hint">Drag this to your browser's bookmarks bar. On any website, click it to add that page to a collection.</div>
+      <div class="hint">Drag this to your browser's bookmarks bar. On any website, click it to add that page to a collection. On Nexus mod pages it also fills in the author. If you dragged an older version, drag this one in to replace it.</div>
       <div><a class="bm" id="bookmarklet" href="#">+ Loot Ledger</a></div>
       <div class="hint">Bookmarks bar hidden? Press Ctrl+Shift+B (Cmd+Shift+B on Mac).</div>
     </div>
@@ -358,6 +413,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   const DEFAULTS = { owner: "8BitBoar", repo: "loot-ledger-data", path: "collections.json" };
 
   const COLORS = ["brass", "lapis", "moss", "garnet", "amethyst", "slate"];
+  const TAG_COLORS = ["lapis", "moss", "brass", "garnet", "amethyst", "teal", "rust", "rose", "olive", "slate"];
   const API = "https://api.github.com";
   const NO_GAME = "__none";
   const $ = (id) => document.getElementById(id);
@@ -384,9 +440,9 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
 
   const state = {
     connected: false,
-    games: [], collections: [],
+    games: [], collections: [], looseTags: [], settings: { myAuthor: "" },
     view: readView(),
-    filter: "", sort: "new",
+    filter: "", sort: "new", tagFilter: new Set(), mineOnly: false, authorFilter: "",
     editingLinkId: null, deleteArmed: false, gameDeleteArmed: false,
     dialogMode: null, dialogIcon: "",
     quick: null,
@@ -395,7 +451,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   (function readQuery() {
     try {
       const q = new URLSearchParams(location.search);
-      if (q.get("add")) state.quick = { url: q.get("add"), title: q.get("title") || "" };
+      if (q.get("add")) state.quick = { url: q.get("add"), title: q.get("title") || "", author: q.get("author") || "" };
       if (q.has("add") || q.has("title")) history.replaceState(null, "", location.pathname + location.hash);
     } catch (e) {}
   })();
@@ -417,12 +473,14 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   const getCol = (id) => state.collections.find((c) => c.id === id);
   const getGame = (id) => state.games.find((g) => g.id === id);
   const gameOf = (col) => (col && col.gameId ? getGame(col.gameId) : null) || null;
-  const colsOf = (gameId) => state.collections.filter((c) => gameId === NO_GAME ? !gameOf(c) : c.gameId === gameId);
+  const gidOf = (col) => (gameOf(col) ? col.gameId : null);
+  const colsOf = (gameId) => state.collections.filter((c) => gameId === NO_GAME || gameId == null ? !gameOf(c) : c.gameId === gameId);
   const sortedGames = () => state.games.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   const linkCount = (cols) => cols.reduce((n, c) => n + (c.links || []).length, 0);
   const fmtDate = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); } catch (e) { return ""; } };
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const initial = (s) => ((s || "?").trim().charAt(0).toUpperCase() || "?");
+  const byName = (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
   function normUrl(raw) {
     let s = (raw || "").trim();
@@ -478,6 +536,136 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       t.append(g);
     } else t.append(h("span", { class: "letter", text: initial(col && col.name) }));
     return t;
+  }
+
+  /* ===== tags (each game has its own list; collections without a game share one) ===== */
+  function tagList(gid) {
+    const g = gid ? getGame(gid) : null;
+    if (g) { if (!Array.isArray(g.tags)) g.tags = []; return g.tags; }
+    return state.looseTags;
+  }
+  const tagById = (gid, id) => tagList(gid).find((t) => t.id === id);
+  const tagColor = (t) => (TAG_COLORS.includes(t && t.color) ? t.color : "slate");
+  function tagChip(t, o = {}) {
+    const el = o.onclick
+      ? h("button", { class: "tag", type: "button", "aria-pressed": o.pressed == null ? null : String(!!o.pressed), onclick: o.onclick, title: o.title || null })
+      : h("span", { class: "tag" });
+    el.style.setProperty("--c", `var(--c-${tagColor(t)})`);
+    el.append(t.name);
+    if (o.count != null) el.append(h("span", { class: "tc", text: String(o.count) }));
+    if (o.remove) el.append(h("button", { class: "x", type: "button", "aria-label": "Remove tag " + t.name, onclick: (e) => { e.preventDefault(); e.stopPropagation(); o.remove(); } }, "×"));
+    return el;
+  }
+  // Move tag ids from one game's list to another's, matching by name and creating missing tags.
+  function remapTags(ids, fromGid, toGid) {
+    if ((fromGid || null) === (toGid || null)) return (ids || []).slice();
+    const from = tagList(fromGid), to = tagList(toGid);
+    const out = [];
+    for (const id of ids || []) {
+      const t = from.find((x) => x.id === id);
+      if (!t) continue;
+      let m = to.find((x) => x.name.toLowerCase() === t.name.toLowerCase());
+      if (!m) { m = { id: newId(), name: t.name, color: t.color }; to.push(m); }
+      if (!out.includes(m.id)) out.push(m.id);
+    }
+    return out;
+  }
+  function tagUses(gid, tagId) {
+    let n = 0;
+    for (const c of colsOf(gid || NO_GAME)) for (const l of c.links || []) if ((l.tags || []).includes(tagId)) n++;
+    return n;
+  }
+
+  /* Tag editor used in the add, edit and quick-add forms. New tags are only saved when the form is. */
+  function tagEditor(gid, initialIds, idPrefix) {
+    const selected = (initialIds || []).filter((id) => tagById(gid, id));
+    const pending = [];
+    const listId = idPrefix + "-dl";
+    const dl = h("datalist", { id: listId });
+    const input = h("input", { id: idPrefix, placeholder: "Add tags…", "aria-label": "Tags", list: listId, autocomplete: "off", maxlength: "40" });
+    const wrap = h("div", { class: "tag-editor", onclick: (e) => { if (e.target === wrap) input.focus(); } });
+    const all = () => [...tagList(gid), ...pending];
+    function draw() {
+      const chips = selected.map((id) => {
+        const t = all().find((x) => x.id === id);
+        return t ? tagChip(t, { remove: () => { selected.splice(selected.indexOf(id), 1); draw(); input.focus(); } }) : null;
+      }).filter(Boolean);
+      dl.replaceChildren(...tagList(gid).filter((t) => !selected.includes(t.id)).sort(byName).map((t) => h("option", { value: t.name })));
+      wrap.replaceChildren(...chips, input, dl);
+    }
+    function add(name, keepFocus) {
+      name = (name || "").replace(/,/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+      input.value = "";
+      if (!name) return;
+      let t = all().find((x) => x.name.toLowerCase() === name.toLowerCase());
+      if (!t) { t = { id: newId(), name, color: TAG_COLORS[(tagList(gid).length + pending.length) % TAG_COLORS.length] }; pending.push(t); }
+      if (!selected.includes(t.id)) selected.push(t.id);
+      draw();
+      if (keepFocus) input.focus();
+    }
+    input.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === ",") && input.value.trim()) { e.preventDefault(); add(input.value, true); }
+      else if (e.key === "Backspace" && !input.value && selected.length) { selected.pop(); draw(); input.focus(); }
+    });
+    input.addEventListener("input", (e) => {
+      // Picking a suggestion from the dropdown adds it straight away (typing doesn't).
+      const picked = !e.inputType || e.inputType === "insertReplacementText";
+      if (picked && tagList(gid).some((t) => t.name === input.value)) add(input.value, true);
+    });
+    input.addEventListener("blur", () => { if (input.value.trim()) add(input.value, false); });
+    draw();
+    return {
+      el: wrap,
+      names() { return selected.map((id) => (all().find((x) => x.id === id) || {}).name).filter(Boolean); },
+      addName(n) { add(n, false); },
+      reset() { selected.length = 0; pending.length = 0; input.value = ""; draw(); },
+      commit() {
+        if (input.value.trim()) add(input.value, false);
+        const list = tagList(gid);
+        for (const t of pending) if (selected.includes(t.id) && !list.some((x) => x.id === t.id)) list.push(t);
+        return selected.slice();
+      },
+    };
+  }
+
+  /* ===== authors ===== */
+  const myNames = () => (state.settings.myAuthor || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const isMine = (l) => !!(l.author && myNames().includes(l.author.trim().toLowerCase()));
+
+  /* ===== filters ===== */
+  function clearFilters() { state.filter = ""; state.tagFilter = new Set(); state.mineOnly = false; state.authorFilter = ""; }
+  const filtersActive = () => !!(state.filter.trim() || state.mineOnly || state.authorFilter || state.tagFilter.size);
+  function linkMatches(l, gid) {
+    if (state.mineOnly && !isMine(l)) return false;
+    if (state.authorFilter && (l.author || "").trim().toLowerCase() !== state.authorFilter.toLowerCase()) return false;
+    for (const t of state.tagFilter) if (!(l.tags || []).includes(t)) return false;
+    const q = state.filter.trim().toLowerCase();
+    if (q) {
+      const names = (l.tags || []).map((id) => (tagById(gid, id) || {}).name || "");
+      if (![l.title, l.url, l.note, l.author, ...names].some((s) => (s || "").toLowerCase().includes(q))) return false;
+    }
+    return true;
+  }
+  function filterBar(gid, links, rerender) {
+    const counts = new Map();
+    for (const l of links) for (const id of l.tags || []) counts.set(id, (counts.get(id) || 0) + 1);
+    const tags = tagList(gid).filter((t) => counts.has(t.id) || state.tagFilter.has(t.id)).sort(byName);
+    const items = [];
+    if (myNames().length) {
+      items.push(h("button", { class: "btn sm toggle", type: "button", "aria-pressed": String(state.mineOnly), onclick: () => { state.mineOnly = !state.mineOnly; rerender(); } },
+        `Mine · ${links.filter(isMine).length}`));
+    }
+    for (const t of tags) items.push(tagChip(t, { pressed: state.tagFilter.has(t.id), count: counts.get(t.id) || 0, title: "Show only links tagged " + t.name,
+      onclick: () => { state.tagFilter.has(t.id) ? state.tagFilter.delete(t.id) : state.tagFilter.add(t.id); rerender(); } }));
+    if (state.authorFilter) {
+      const a = h("span", { class: "tag" }, "by " + state.authorFilter, h("button", { class: "x", type: "button", "aria-label": "Clear author filter", onclick: () => { state.authorFilter = ""; rerender(); } }, "×"));
+      a.style.setProperty("--c", "var(--c-slate)");
+      items.push(a);
+    }
+    items.push(h("span", { class: "sep" }));
+    if (filtersActive()) items.push(h("button", { class: "btn ghost sm", type: "button", onclick: () => { clearFilters(); rerender(true); } }, "Clear filters"));
+    items.push(h("button", { class: "btn ghost sm", type: "button", onclick: () => openTagManager(gid) }, "Manage tags"));
+    return h("div", { class: "filters" }, items);
   }
 
   /* ===== toast ===== */
@@ -556,13 +744,18 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
 
   function serialize() {
-    return JSON.stringify({ app: "loot-ledger", version: 2, games: state.games, collections: state.collections }, null, 2) + "\n";
+    return JSON.stringify({ app: "loot-ledger", version: 3, settings: state.settings, games: state.games, looseTags: state.looseTags, collections: state.collections }, null, 2) + "\n";
   }
+  const normTags = (arr) => (Array.isArray(arr) ? arr : []).filter((t) => t && t.id && typeof t.name === "string" && t.name.trim())
+    .map((t) => ({ id: String(t.id), name: t.name.trim().slice(0, 40), color: TAG_COLORS.includes(t.color) ? t.color : "slate" }));
   function applyData(data) {
+    state.settings = { myAuthor: String((data && data.settings && data.settings.myAuthor) || "") };
+    state.looseTags = normTags(data && data.looseTags);
     const games = Array.isArray(data && data.games) ? data.games : [];
     state.games = games.filter((g) => g && g.id && typeof g.name === "string").map((g) => ({
       id: String(g.id), name: g.name,
       image: g.image && typeof g.image.path === "string" ? { path: g.image.path, sha: String(g.image.sha || "") } : null,
+      tags: normTags(g.tags),
       createdAt: Number(g.createdAt) || 0,
     }));
     const cols = Array.isArray(data && data.collections) ? data.collections : [];
@@ -571,7 +764,8 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       description: c.description || "", iconSvg: c.iconSvg || "",
       color: COLORS.includes(c.color) ? c.color : "slate",
       links: (Array.isArray(c.links) ? c.links : []).filter((l) => l && normUrl(l.url)).map((l) => ({
-        id: String(l.id || newId()), url: normUrl(l.url), title: l.title || "", note: l.note || "", addedAt: Number(l.addedAt) || 0,
+        id: String(l.id || newId()), url: normUrl(l.url), title: l.title || "", author: String(l.author || ""),
+        tags: Array.isArray(l.tags) ? l.tags.map(String) : [], note: l.note || "", addedAt: Number(l.addedAt) || 0,
       })),
       createdAt: Number(c.createdAt) || 0, updatedAt: Number(c.updatedAt) || 0,
     }));
@@ -598,9 +792,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
   function gameArt(game, cls) {
     const box = h("div", { class: "art" + (cls ? " " + cls : ""), "aria-hidden": "true" }, h("span", { class: "art-letter", text: initial(game && game.name) }));
-    if (game && game.image && game.image.path) {
-      imageURL(game.image.path).then((u) => { if (u) box.append(h("img", { src: u, alt: "" })); });
-    }
+    if (game && game.image && game.image.path) imageURL(game.image.path).then((u) => { if (u) box.append(h("img", { src: u, alt: "" })); });
     return box;
   }
   function resizeImage(file) {
@@ -630,7 +822,6 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     let r;
     try {
       r = await gh(contentsPath(path), { method: "PUT", body });
-      // 409 = another save landed on the branch at the same moment; try once more.
       if (r.status === 409) { await new Promise((ok) => setTimeout(ok, 800)); r = await gh(contentsPath(path), { method: "PUT", body }); }
     } catch (e) { throw new Error("Couldn't reach GitHub to upload the picture."); }
     if (!r.ok) throw new Error(`GitHub refused the picture upload (error ${r.status}).`);
@@ -640,14 +831,13 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
   async function deleteImage(image, gameName) {
     if (!image || !image.path || !image.sha) return;
-    try {
-      await gh(contentsPath(image.path), { method: "DELETE", body: JSON.stringify({ message: `Remove picture for ${gameName}`, sha: image.sha, branch: cfg.branch }) });
-    } catch (e) {}
+    try { await gh(contentsPath(image.path), { method: "DELETE", body: JSON.stringify({ message: `Remove picture for ${gameName}`, sha: image.sha, branch: cfg.branch }) }); } catch (e) {}
   }
 
   /* ----- saving collections.json: batched into one commit ----- */
   let dirty = false, saving = false, again = false, saveTimer = null, lastAction = "Update collections", overwroteRemote = false;
   let afterSave = null;
+  function afterSaveQueue(fn) { const prev = afterSave; afterSave = () => { if (prev) prev(); fn(); }; }
   function setStatus(s, extra) {
     const el = $("status");
     el.dataset.s = s;
@@ -703,13 +893,13 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
   window.addEventListener("beforeunload", (ev) => { if (dirty || saving) { ev.preventDefault(); ev.returnValue = ""; } });
 
+  const anyDialogOpen = () => ["colDialog", "gameDialog", "tagDialog", "setDialog"].some((id) => $(id).open);
   async function refreshIfIdle() {
-    if (!state.connected || dirty || saving || state.editingLinkId) return;
-    if ($("colDialog").open || $("gameDialog").open || Date.now() - lastFetch < 15000) return;
+    if (!state.connected || dirty || saving || state.editingLinkId || anyDialogOpen() || Date.now() - lastFetch < 15000) return;
     try {
       const f = await readFile();
       lastFetch = Date.now();
-      if (dirty || saving) return;
+      if (dirty || saving || anyDialogOpen()) return;
       if ((f ? f.sha : null) !== sha) { sha = f ? f.sha : null; applyData(f ? f.data : null); panelBuiltFor = null; render(); toast("Loaded changes from another computer"); }
     } catch (e) {}
   }
@@ -719,7 +909,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   function mutateLinks(colId, mut, action) {
     const c = getCol(colId);
     if (!c) return;
-    const links = (c.links || []).map((l) => ({ ...l }));
+    const links = (c.links || []).map((l) => ({ ...l, tags: (l.tags || []).slice() }));
     mut(links);
     c.links = links;
     c.updatedAt = Date.now();
@@ -789,18 +979,23 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   /* ===== navigation ===== */
   function go(view) {
     const same = state.view.type === view.type && state.view.id === view.id;
-    if (!same) { state.filter = ""; state.editingLinkId = null; state.deleteArmed = false; state.gameDeleteArmed = false; panelBuiltFor = null; }
+    if (!same) { clearFilters(); state.editingLinkId = null; state.deleteArmed = false; state.gameDeleteArmed = false; panelBuiltFor = null; }
     state.view = view;
     store.set("ll.view", JSON.stringify(view));
     render();
     if (!same) window.scrollTo({ top: 0 });
   }
   $("homeBtn").addEventListener("click", () => go({ type: "home" }));
+  $("mineBtn").addEventListener("click", () => go({ type: "mine" }));
 
   /* ===== shelf ===== */
+  function allMineCount() { let n = 0; for (const c of state.collections) for (const l of c.links || []) if (isMine(l)) n++; return n; }
   function renderShelf() {
     $("homeBtn").setAttribute("aria-current", state.view.type === "home" ? "true" : "false");
     $("gameCount").textContent = state.games.length ? String(state.games.length) : "";
+    $("mineBtn").hidden = !myNames().length;
+    $("mineBtn").setAttribute("aria-current", state.view.type === "mine" ? "true" : "false");
+    $("mineCount").textContent = String(allMineCount());
     const colItem = (c) => h("li", { class: "col-item" },
       h("button", { type: "button", "aria-current": state.view.type === "col" && state.view.id === c.id ? "true" : "false", onclick: () => go({ type: "col", id: c.id }) },
         tile(c, "sm"), h("span", { class: "nm", text: c.name || "Untitled" }), h("span", { class: "ct", text: String((c.links || []).length) })));
@@ -818,7 +1013,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
 
   /* ===== views ===== */
-  let panelBuiltFor = null, headEl, listEl, countEl;
+  let panelBuiltFor = null, headEl, listEl, countEl, filtersEl, colSearch;
 
   function render() {
     if (!state.connected) return;
@@ -827,7 +1022,12 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (v.type === "game" && !getGame(v.id)) state.view = { type: "home" };
     renderShelf();
     if (state.view.type === "col") renderColView(getCol(state.view.id));
-    else { panelBuiltFor = null; state.view.type === "game" ? renderGameView(getGame(state.view.id)) : renderHome(); }
+    else {
+      panelBuiltFor = null;
+      if (state.view.type === "game") renderGameView(getGame(state.view.id));
+      else if (state.view.type === "mine") renderMine();
+      else renderHome();
+    }
   }
 
   function gameCard(g) {
@@ -876,6 +1076,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     ].filter(Boolean));
   }
 
+  /* ----- game view: banner, collections, and a finder across the game's links ----- */
   function renderGameView(g) {
     const cols = colsOf(g.id);
     const del = h("button", { class: "btn danger" + (state.gameDeleteArmed ? " armed" : ""), type: "button", onclick: () => {
@@ -886,6 +1087,27 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       }
       deleteGame(g.id);
     } }, state.gameDeleteArmed ? (cols.length ? `Delete game (keeps its ${plural(cols.length, "collection")})` : "Delete for good") : "Delete");
+
+    const search = h("input", { class: "field", id: "gameSearch", type: "search", placeholder: `Search all ${g.name} links`, "aria-label": "Search this game's links" });
+    search.value = state.filter;
+    const barEl = h("div");
+    const resultsEl = h("div");
+    const allLinks = [];
+    for (const c of cols) for (const l of c.links || []) allLinks.push({ c, l });
+    function update(syncSearch) {
+      if (syncSearch) search.value = state.filter;
+      barEl.replaceChildren(filterBar(g.id, allLinks.map((x) => x.l), update));
+      if (!filtersActive()) {
+        resultsEl.replaceChildren(h("div", { class: "hint", text: allLinks.length ? "Pick a tag, search, or use Mine to find links across every collection in this game." : "No links in this game yet." }));
+        return;
+      }
+      const hits = allLinks.filter((x) => linkMatches(x.l, g.id)).sort((a, b) => (b.l.addedAt || 0) - (a.l.addedAt || 0));
+      resultsEl.replaceChildren(
+        h("div", { class: "hint", text: `${plural(hits.length, "link")} found` }),
+        hits.length ? h("ol", { class: "links" }, hits.map((x) => linkRow(x.c, x.l, { showCol: true }))) : h("div", { class: "none-found", text: "Nothing matches these filters." }));
+    }
+    search.addEventListener("input", () => { state.filter = search.value; update(); });
+
     $("panel").replaceChildren(...[
       quickNode(),
       h("section", { class: "card game-hero" },
@@ -893,9 +1115,44 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
         h("div", { class: "info" },
           h("div", { style: "min-width:0" },
             h("h2", { text: g.name }),
-            h("div", { class: "meta", text: `${plural(cols.length, "collection")} · ${plural(linkCount(cols), "link")}` })),
-          h("div", { class: "acts" }, h("button", { class: "btn", type: "button", onclick: () => openGameDialog(g.id) }, "Edit"), del))),
+            h("div", { class: "meta", text: `${plural(cols.length, "collection")} · ${plural(linkCount(cols), "link")} · ${plural(tagList(g.id).length, "tag")}` })),
+          h("div", { class: "acts" },
+            h("button", { class: "btn", type: "button", onclick: () => openTagManager(g.id) }, "Tags"),
+            h("button", { class: "btn", type: "button", onclick: () => openGameDialog(g.id) }, "Edit"), del))),
       h("div", { class: "col-grid" }, ...cols.map(colCard), addCard("New collection for this game", () => openDialog(null, { gameId: g.id }))),
+      h("section", { class: "card", style: "display:grid;gap:10px" },
+        h("div", { class: "add-label", text: `Find links in ${g.name}` }),
+        search, barEl, resultsEl),
+    ].filter(Boolean));
+    update();
+  }
+
+  /* ----- My uploads ----- */
+  function renderMine() {
+    const panel = $("panel");
+    if (!myNames().length) {
+      panel.replaceChildren(h("div", { class: "card state" },
+        h("h2", { text: "My uploads" }),
+        h("p", { text: "Set your author name in Settings, and every link you're the author of will be gathered here." }),
+        h("button", { class: "btn primary", type: "button", onclick: openSettings }, "Open Settings")));
+      return;
+    }
+    const sections = [];
+    const groups = [...sortedGames().map((g) => ({ g, cols: colsOf(g.id) })), { g: null, cols: colsOf(NO_GAME) }];
+    let total = 0;
+    for (const { g, cols } of groups) {
+      const items = [];
+      for (const c of cols) for (const l of c.links || []) if (isMine(l)) items.push({ c, l });
+      if (!items.length) continue;
+      total += items.length;
+      sections.push(h("section", { class: "card", style: "display:grid;gap:8px" },
+        h("h3", { class: "section-label", style: "margin:0" }, g ? gameArt(g, "mini") : null, g ? g.name : "No game"),
+        h("ol", { class: "links" }, items.sort((a, b) => (b.l.addedAt || 0) - (a.l.addedAt || 0)).map((x) => linkRow(x.c, x.l, { showCol: true })))));
+    }
+    panel.replaceChildren(...[
+      quickNode(),
+      h("div", { class: "view-head" }, h("h2", { text: "My uploads" }), h("span", { class: "hint", text: `${plural(total, "link")} by ${state.settings.myAuthor}` })),
+      ...(sections.length ? sections : [h("div", { class: "card state" }, h("p", { text: `No links have the author ${state.settings.myAuthor} yet. Add an author when you save a link, or edit an existing one.` }))]),
     ].filter(Boolean));
   }
 
@@ -920,6 +1177,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     const q = state.quick;
     const urlIn = h("input", { class: "field mono", id: "qUrl", "aria-label": "Link URL" }); urlIn.value = q.url;
     const titleIn = h("input", { class: "field", id: "qTitle", maxlength: "200", "aria-label": "Title" }); titleIn.value = cleanTitle(q.title) || guessTitle(normUrl(q.url) || q.url);
+    const authorIn = h("input", { class: "field", id: "qAuthor", maxlength: "80", placeholder: "Author (optional)", "aria-label": "Author" }); authorIn.value = (q.author || "").slice(0, 80);
     const noteIn = h("input", { class: "field", id: "qNote", maxlength: "600", placeholder: "Note (optional)", "aria-label": "Note" });
     const sel = quickSel = h("select", { class: "field", id: "qCol", "aria-label": "Collection" });
     fillQuickSelect(sel);
@@ -927,10 +1185,23 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (last && getCol(last)) sel.value = last;
     else if (state.view.type === "col" && getCol(state.view.id)) sel.value = state.view.id;
     if (!state.collections.length) sel.value = "__new";
+    const tagSlot = h("div");
+    let editor = null, editorGid;
+    function swapEditor() {
+      const gid = sel.value && sel.value !== "__new" ? gidOf(getCol(sel.value)) : null;
+      if (editor && gid === editorGid) return;
+      const names = editor ? editor.names() : [];
+      editor = tagEditor(gid, [], "qTags"); editorGid = gid;
+      names.forEach((n) => editor.addName(n));
+      tagSlot.replaceChildren(editor.el);
+    }
+    swapEditor();
+    sel.addEventListener("change", swapEditor);
     const err = h("div", { class: "err", hidden: true });
     const card = h("form", { class: "card add quick" },
       h("div", { class: "add-label", text: "Add this page" }),
       h("div", { class: "row2" }, titleIn, sel),
+      h("div", { class: "add-row2" }, authorIn, tagSlot),
       urlIn, noteIn, err,
       h("div", { class: "dlg-foot", style: "justify-content:flex-start" },
         h("button", { class: "btn primary", type: "submit" }, "Add to collection"),
@@ -941,14 +1212,16 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       if (!url) { err.textContent = "That address isn't a web link."; err.hidden = false; return; }
       if (sel.value === "__new") {
         const gid = state.view.type === "game" ? state.view.id : null;
-        openDialog(null, { gameId: gid, afterCreate: (id) => { fillQuickSelect(sel); sel.value = id; card.requestSubmit(); } });
+        openDialog(null, { gameId: gid, afterCreate: (id) => { fillQuickSelect(sel); sel.value = id; swapEditor(); card.requestSubmit(); } });
         return;
       }
       const c = getCol(sel.value);
       if (!c) return;
+      swapEditor();
+      const tags = editor.commit();
       store.set("ll.lastQuick", c.id);
       state.quick = null;
-      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
+      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags, note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
       panelBuiltFor = null;
       go({ type: "col", id: c.id });
       afterSaveQueue(() => toast(`Saved to ${c.name}. You can close this tab.`));
@@ -969,16 +1242,20 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
 
   function buildColPanel(col) {
     panelBuiltFor = col.id;
+    const gid = gidOf(col);
     headEl = h("section", { class: "card", style: "display:grid;gap:12px" });
     const urlIn = h("input", { class: "field mono", id: "addUrl", placeholder: "Paste a link (https://…)", autocomplete: "off", inputmode: "url", "aria-label": "Link URL" });
     const titleIn = h("input", { class: "field", id: "addTitle", placeholder: "Title (optional)", maxlength: "200", "aria-label": "Link title" });
+    const authorIn = h("input", { class: "field", id: "addAuthor", placeholder: "Author (optional)", maxlength: "80", "aria-label": "Author" });
+    const editor = tagEditor(gid, [], "addTags");
     const noteIn = h("input", { class: "field", id: "addNote", placeholder: "Note (optional), e.g. needs SKSE, install after USSEP", maxlength: "600", "aria-label": "Note" });
     const err = h("div", { class: "err", hidden: true });
     const form = h("form", { class: "card add", id: "addForm" },
       h("div", { class: "add-label", text: "Add a link" }),
       h("div", { class: "add-row" }, urlIn, titleIn, h("button", { class: "btn primary", type: "submit" }, "Add")),
+      h("div", { class: "add-row2" }, authorIn, editor.el),
       noteIn, err,
-      h("div", { class: "hint", text: "Tip: paste a link anywhere on this page outside a text box and it lands here." }));
+      h("div", { class: "hint", text: "Tags: type and press Enter. Tip: paste a link anywhere on this page outside a text box and it lands here." }));
     urlIn.addEventListener("input", () => { const u = normUrl(urlIn.value); titleIn.placeholder = u ? guessTitle(u) : "Title (optional)"; err.hidden = true; });
     form.addEventListener("submit", (ev) => {
       ev.preventDefault();
@@ -987,23 +1264,26 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       const c = getCol(state.view.id);
       if (!c) return;
       const dupe = (c.links || []).some((l) => l.url === url);
-      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
-      urlIn.value = ""; titleIn.value = ""; noteIn.value = ""; titleIn.placeholder = "Title (optional)";
+      const tags = editor.commit();
+      mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), author: authorIn.value.trim(), tags, note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
+      urlIn.value = ""; titleIn.value = ""; noteIn.value = ""; authorIn.value = ""; titleIn.placeholder = "Title (optional)";
+      editor.reset();
       toast(dupe ? "Added. That link was already in this collection." : "Link added");
       urlIn.focus();
     });
 
-    const search = h("input", { class: "field", id: "linkSearch", type: "search", placeholder: "Search this collection", "aria-label": "Search links" });
-    search.value = state.filter;
-    search.addEventListener("input", () => { state.filter = search.value; renderLinks(getCol(state.view.id)); });
+    colSearch = h("input", { class: "field", id: "linkSearch", type: "search", placeholder: "Search titles, authors, tags, notes", "aria-label": "Search links" });
+    colSearch.value = state.filter;
+    colSearch.addEventListener("input", () => { state.filter = colSearch.value; renderLinks(getCol(state.view.id)); });
     const sort = h("select", { class: "field", id: "linkSort", "aria-label": "Sort links" },
       h("option", { value: "new" }, "Newest first"), h("option", { value: "old" }, "Oldest first"),
-      h("option", { value: "az" }, "Title A–Z"), h("option", { value: "site" }, "By site"));
+      h("option", { value: "az" }, "Title A–Z"), h("option", { value: "author" }, "By author"), h("option", { value: "site" }, "By site"));
     sort.value = state.sort;
     sort.addEventListener("change", () => { state.sort = sort.value; renderLinks(getCol(state.view.id)); });
     countEl = h("span", { class: "hint" });
+    filtersEl = h("div");
     listEl = h("ol", { class: "links" });
-    const listCard = h("section", { class: "card", style: "display:grid;gap:10px" }, h("div", { class: "tools" }, search, sort, countEl), listEl);
+    const listCard = h("section", { class: "card", style: "display:grid;gap:10px" }, h("div", { class: "tools" }, colSearch, sort, countEl), filtersEl, listEl);
     $("panel").replaceChildren(...[quickNode(), headEl, form, listCard].filter(Boolean));
   }
 
@@ -1021,8 +1301,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     const crumb = h("div", { class: "crumb" },
       h("button", { type: "button", onclick: () => go({ type: "home" }) }, "My games"),
       h("span", { text: "›", "aria-hidden": "true" }),
-      g ? h("button", { type: "button", onclick: () => go({ type: "game", id: g.id }) }, gameArt(g, "mini"), g.name)
-        : h("span", { text: "No game" }));
+      g ? h("button", { type: "button", onclick: () => go({ type: "game", id: g.id }) }, gameArt(g, "mini"), g.name) : h("span", { text: "No game" }));
     headEl.replaceChildren(crumb,
       h("div", { class: "col-head" },
         tile(col, "lg"),
@@ -1034,25 +1313,27 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
 
   function sortedLinks(col) {
-    let links = (col.links || []).slice();
-    const q = state.filter.trim().toLowerCase();
-    if (q) links = links.filter((l) => [l.title, l.url, l.note].some((s) => (s || "").toLowerCase().includes(q)));
+    const gid = gidOf(col);
+    const links = (col.links || []).filter((l) => linkMatches(l, gid));
     const by = {
       new: (a, b) => (b.addedAt || 0) - (a.addedAt || 0),
       old: (a, b) => (a.addedAt || 0) - (b.addedAt || 0),
       az: (a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }),
+      author: (a, b) => (!a.author - !b.author) || (a.author || "").localeCompare(b.author || "", undefined, { sensitivity: "base" }) || (a.title || "").localeCompare(b.title || ""),
       site: (a, b) => siteOf(a.url).localeCompare(siteOf(b.url)) || (a.title || "").localeCompare(b.title || ""),
     }[state.sort];
     return links.sort(by);
   }
 
-  function renderLinks(col) {
+  function renderLinks(col, syncSearch) {
     if (!col || !listEl) return;
+    if (syncSearch && colSearch) colSearch.value = state.filter;
     const all = (col.links || []).length;
     const links = sortedLinks(col);
-    countEl.textContent = state.filter.trim() ? `${links.length} of ${all}` : "";
+    filtersEl.replaceChildren(filterBar(gidOf(col), col.links || [], (sync) => renderLinks(getCol(state.view.id), sync)));
+    countEl.textContent = filtersActive() ? `${links.length} of ${all}` : "";
     if (!all) { listEl.replaceChildren(h("li", { class: "none-found", text: "No links yet. Paste one above to start." })); return; }
-    if (!links.length) { listEl.replaceChildren(h("li", { class: "none-found", text: `Nothing matches “${state.filter.trim()}”.` })); return; }
+    if (!links.length) { listEl.replaceChildren(h("li", { class: "none-found", text: "Nothing matches these filters." })); return; }
     listEl.replaceChildren(...links.map((l) => linkRow(col, l)));
   }
 
@@ -1067,16 +1348,37 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     return out;
   }
 
-  function linkRow(col, l) {
+  // Clicking a tag or author narrows the current view; from My uploads it opens that game's finder.
+  function onTagClick(col, t) {
+    const gid = gidOf(col);
+    if (state.view.type === "mine") { go(gid ? { type: "game", id: gid } : { type: "home" }); if (gid) { state.tagFilter = new Set([t.id]); render(); } return; }
+    state.tagFilter.has(t.id) ? state.tagFilter.delete(t.id) : state.tagFilter.add(t.id);
+    render();
+  }
+  function onAuthorClick(author) {
+    if (state.view.type === "mine") return;
+    state.authorFilter = state.authorFilter.toLowerCase() === author.toLowerCase() ? "" : author;
+    render();
+  }
+
+  function linkRow(col, l, opts = {}) {
     const host = siteOf(l.url);
-    const opts = state.collections.length > 1 ? moveOptions(col.id) : [];
-    const move = opts.length ? h("select", { "aria-label": "Move to another collection", onchange: (ev) => { if (ev.target.value) moveLink(col.id, ev.target.value, l.id); } },
-      h("option", { value: "" }, "Move to…"), ...opts) : null;
+    const gid = gidOf(col);
+    const opts2 = state.collections.length > 1 ? moveOptions(col.id) : [];
+    const move = opts2.length ? h("select", { "aria-label": "Move to another collection", onchange: (ev) => { if (ev.target.value) moveLink(col.id, ev.target.value, l.id); } },
+      h("option", { value: "" }, "Move to…"), ...opts2) : null;
+    const tags = (l.tags || []).map((id) => tagById(gid, id)).filter(Boolean).sort(byName);
+    const author = (l.author || "").trim();
     return h("li", { class: "link" },
-      h("div", { style: "min-width:0;display:grid;gap:2px" },
+      h("div", { style: "min-width:0;display:grid;gap:3px" },
+        opts.showCol ? h("button", { class: "col-label", type: "button", onclick: () => go({ type: "col", id: col.id }) }, tile(col, "sm"), col.name) : null,
         h("div", { class: "line1" },
           h("span", { class: "chip " + chipClass(host), text: host || "link" }),
-          h("a", { class: "ttl", href: l.url, target: "_blank", rel: "noopener noreferrer", text: l.title || l.url })),
+          h("a", { class: "ttl", href: l.url, target: "_blank", rel: "noopener noreferrer", text: l.title || l.url }),
+          isMine(l) ? h("span", { class: "mine", text: "Mine" }) : null),
+        author || tags.length ? h("div", { class: "line1" },
+          author ? h("span", { class: "by" }, "by ", state.view.type === "mine" ? h("b", { text: author }) : h("button", { type: "button", title: "Show links by " + author, onclick: () => onAuthorClick(author) }, author)) : null,
+          tags.length ? h("span", { class: "tags" }, tags.map((t) => tagChip(t, { pressed: state.view.type !== "mine" ? state.tagFilter.has(t.id) : null, title: "Filter by " + t.name, onclick: () => onTagClick(col, t) }))) : null) : null,
         h("div", { class: "url", text: l.url }),
         l.note ? h("p", { class: "note", text: l.note }) : null,
         l.addedAt ? h("div", { class: "added", text: "Added " + fmtDate(l.addedAt) }) : null),
@@ -1097,11 +1399,14 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     const c = getCol(colId); const l = c && c.links.find((x) => x.id === linkId);
     if (!l) return;
     state.editingLinkId = linkId;
+    const gid = gidOf(c);
     const urlIn = h("input", { class: "field mono", id: "editUrl", "aria-label": "Link URL" }); urlIn.value = l.url;
-    const ttlIn = h("input", { class: "field", id: "editTitle", maxlength: "200", "aria-label": "Title" }); ttlIn.value = l.title || "";
-    const noteIn = h("textarea", { class: "field", id: "editNote", rows: "2", maxlength: "600", "aria-label": "Note" }); noteIn.value = l.note || "";
+    const ttlIn = h("input", { class: "field", id: "editTitle", maxlength: "200", "aria-label": "Title", placeholder: "Title" }); ttlIn.value = l.title || "";
+    const authorIn = h("input", { class: "field", id: "editAuthor", maxlength: "80", "aria-label": "Author", placeholder: "Author" }); authorIn.value = l.author || "";
+    const editor = tagEditor(gid, l.tags || [], "editTags");
+    const noteIn = h("textarea", { class: "field", id: "editNote", rows: "2", maxlength: "600", "aria-label": "Note", placeholder: "Note" }); noteIn.value = l.note || "";
     const err = h("div", { class: "err", hidden: true });
-    const form = h("form", { class: "link-edit" }, urlIn, ttlIn, noteIn, err,
+    const form = h("form", { class: "link-edit" }, urlIn, ttlIn, h("div", { class: "add-row2" }, authorIn, editor.el), noteIn, err,
       h("div", { class: "row" },
         h("button", { class: "btn", type: "button", onclick: () => { state.editingLinkId = null; render(); } }, "Cancel"),
         h("button", { class: "btn primary", type: "submit" }, "Save")));
@@ -1109,8 +1414,9 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       ev.preventDefault();
       const url = normUrl(urlIn.value);
       if (!url) { err.textContent = "Enter a valid web address."; err.hidden = false; return; }
+      const tags = editor.commit();
       state.editingLinkId = null;
-      mutateLinks(colId, (links) => { const x = links.find((y) => y.id === linkId); if (x) { x.url = url; x.title = ttlIn.value.trim() || guessTitle(url); x.note = noteIn.value.trim(); } }, `Edit link in ${c.name}`);
+      mutateLinks(colId, (links) => { const x = links.find((y) => y.id === linkId); if (x) { x.url = url; x.title = ttlIn.value.trim() || guessTitle(url); x.author = authorIn.value.trim(); x.tags = tags; x.note = noteIn.value.trim(); } }, `Edit link in ${c.name}`);
       toast("Link saved");
     });
     li.replaceChildren(form);
@@ -1131,7 +1437,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (!from || !to) return;
     const l = from.links.find((x) => x.id === linkId);
     if (!l) return;
-    to.links = [...to.links, { ...l }]; to.updatedAt = Date.now();
+    to.links = [...to.links, { ...l, tags: remapTags(l.tags, gidOf(from), gidOf(to)) }]; to.updatedAt = Date.now();
     mutateLinks(fromId, (links) => { const i = links.findIndex((x) => x.id === linkId); if (i >= 0) links.splice(i, 1); }, `Move link to ${to.name}`);
     toast(`Moved to ${to.name || "Untitled"}`);
   }
@@ -1157,22 +1463,97 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     if (i < 0) return;
     const g = state.games[i];
     const cols = colsOf(id);
+    const savedTags = cols.map((c) => c.links.map((l) => (l.tags || []).slice()));
+    // Collections move to No game; their tags move to the shared No-game list by name.
+    for (const c of cols) c.links = c.links.map((l) => ({ ...l, tags: remapTags(l.tags, id, null) }));
     state.games.splice(i, 1);
     for (const c of cols) c.gameId = null;
     state.gameDeleteArmed = false;
     go({ type: "home" });
     markDirty(`Delete game ${g.name}`);
     let undone = false;
-    // Keep the picture file until the undo window closes.
     setTimeout(() => { if (!undone) deleteImage(g.image, g.name); }, 7000);
     toast(cols.length ? `Deleted “${g.name}”. Its collections moved to No game.` : `Deleted “${g.name}”`, () => {
       undone = true;
       state.games.push(g);
-      for (const c of cols) if (getCol(c.id)) getCol(c.id).gameId = g.id;
+      cols.forEach((c, ci) => {
+        const live = getCol(c.id);
+        if (!live) return;
+        live.gameId = g.id;
+        live.links = live.links.map((l, li) => ({ ...l, tags: savedTags[ci] && savedTags[ci][li] && live.links.length === savedTags[ci].length ? savedTags[ci][li] : remapTags(l.tags, null, g.id) }));
+      });
       markDirty(`Restore game ${g.name}`);
       go({ type: "game", id: g.id });
     });
   }
+
+  /* ===== tag manager ===== */
+  const tdlg = $("tagDialog");
+  let tmGid = null, tmArmed = null;
+  function openTagManager(gid) {
+    tmGid = gid || null; tmArmed = null;
+    const g = tmGid ? getGame(tmGid) : null;
+    $("tmTitle").textContent = g ? `${g.name} tags` : "Tags for collections without a game";
+    $("tmHint").textContent = g ? `These tags are only used in ${g.name}. Renaming or recoloring here doesn't affect other games.` : "These tags are shared by collections that aren't assigned to a game.";
+    $("tmNew").value = "";
+    drawTM();
+    tdlg.showModal();
+  }
+  function drawTM() {
+    const list = tagList(tmGid).slice().sort(byName);
+    if (!list.length) { $("tmList").replaceChildren(h("div", { class: "hint", style: "padding:8px 0", text: "No tags yet. Add one below, or type tags when you add a link." })); return; }
+    $("tmList").replaceChildren(...list.map((t) => {
+      const uses = tagUses(tmGid, t.id);
+      const nameIn = h("input", { class: "field", value: t.name, maxlength: "40", "aria-label": "Tag name" });
+      nameIn.addEventListener("change", () => {
+        const v = nameIn.value.replace(/,/g, " ").replace(/\s+/g, " ").trim();
+        if (!v) { nameIn.value = t.name; return; }
+        if (tagList(tmGid).some((x) => x.id !== t.id && x.name.toLowerCase() === v.toLowerCase())) { toast(`There's already a tag called ${v}.`); nameIn.value = t.name; return; }
+        t.name = v; markDirty(`Rename tag to ${v}`); drawTM(); render();
+      });
+      const armed = tmArmed === t.id;
+      const del = h("button", { class: "btn ghost sm danger" + (armed ? " armed" : ""), type: "button", onclick: () => {
+        if (!armed) { tmArmed = t.id; drawTM(); return; }
+        deleteTag(t.id);
+      } }, armed ? (uses ? `Remove from ${plural(uses, "link")}` : "Confirm") : "Delete");
+      return h("div", { class: "tm-row" },
+        h("div", { class: "tm-name" }, tagChip(t), nameIn),
+        h("div", { class: "tm-side" }, h("span", { class: "ct", text: plural(uses, "link") }), del),
+        h("div", { class: "dots", role: "group", "aria-label": "Color for " + t.name }, TAG_COLORS.map((c) => {
+          const d = h("button", { class: "dot", type: "button", title: c, "aria-label": c, "aria-pressed": String(tagColor(t) === c), onclick: () => {
+            if (t.color === c) return;
+            t.color = c; markDirty(`Recolor tag ${t.name}`); drawTM(); render();
+          } });
+          d.style.setProperty("--c", `var(--c-${c})`);
+          return d;
+        })));
+    }));
+  }
+  function deleteTag(tagId) {
+    const list = tagList(tmGid);
+    const i = list.findIndex((t) => t.id === tagId);
+    if (i < 0) return;
+    const name = list[i].name;
+    list.splice(i, 1);
+    for (const c of colsOf(tmGid || NO_GAME)) c.links = c.links.map((l) => ({ ...l, tags: (l.tags || []).filter((x) => x !== tagId) }));
+    state.tagFilter.delete(tagId);
+    tmArmed = null;
+    markDirty(`Delete tag ${name}`);
+    drawTM(); render();
+    toast(`Deleted tag ${name}`);
+  }
+  $("tmAdd").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const v = $("tmNew").value.replace(/,/g, " ").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (!v) return;
+    const list = tagList(tmGid);
+    if (list.some((x) => x.name.toLowerCase() === v.toLowerCase())) { toast(`There's already a tag called ${v}.`); return; }
+    list.push({ id: newId(), name: v, color: TAG_COLORS[list.length % TAG_COLORS.length] });
+    $("tmNew").value = "";
+    markDirty(`Add tag ${v}`);
+    drawTM(); render();
+  });
+  $("tmClose").addEventListener("click", () => tdlg.close());
 
   /* ===== collection dialog ===== */
   const dlg = $("colDialog");
@@ -1255,6 +1636,14 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       const c = getCol(state.dialogMode);
       dlg.close();
       if (!c) return;
+      const fromGid = gidOf(c);
+      const toGid = body.gameId && getGame(body.gameId) ? body.gameId : null;
+      if (fromGid !== toGid) {
+        // Moving to another game: carry tags over by name into that game's tag list.
+        c.links = c.links.map((l) => ({ ...l, tags: remapTags(l.tags, fromGid, toGid) }));
+        state.tagFilter = new Set();
+        panelBuiltFor = null;
+      }
       Object.assign(c, body, { updatedAt: Date.now() });
       render();
       markDirty(`Edit collection ${name}`);
@@ -1268,8 +1657,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   let gameMode = null, gameAfterCreate = null, pendingPic = null, picRemoved = false, previewUrl = null;
   function setGamePreview() {
     const p = $("gPreview");
-    const name = $("gName").value;
-    p.replaceChildren(h("span", { class: "art-letter", text: initial(name) }));
+    p.replaceChildren(h("span", { class: "art-letter", text: initial($("gName").value) }));
     if (pendingPic) { if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = URL.createObjectURL(pendingPic); p.append(h("img", { src: previewUrl, alt: "" })); }
     else if (!picRemoved && gameMode !== "new") {
       const g = getGame(gameMode);
@@ -1323,35 +1711,54 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       render();
       toast("Game saved");
     } else {
-      state.games.push({ id: gid, name, image, createdAt: Date.now() });
+      state.games.push({ id: gid, name, image, tags: [], createdAt: Date.now() });
       markDirty(`Add game ${name}`);
       const cb = gameAfterCreate; gameAfterCreate = null;
       if (cb) { render(); cb(gid); } else { go({ type: "game", id: gid }); toast("Game added"); }
     }
     if (oldImage && oldImage.path !== (image && image.path)) afterSaveQueue(() => deleteImage(oldImage, name));
   });
-  // Run cleanup once the next collections.json save succeeds.
-  function afterSaveQueue(fn) {
-    const prev = afterSave;
-    afterSave = () => { if (prev) prev(); fn(); };
-  }
 
   /* ===== settings ===== */
   const setDlg = $("setDialog");
-  $("settingsBtn").addEventListener("click", () => {
+  // The bookmarklet runs on the page you're visiting. Keep it free of comments and line-dependent syntax.
+  function bookmarkletCode(BASE) {
+    var a = "";
+    try {
+      if (/(^|\.)nexusmods\.com$/.test(location.hostname)) {
+        var t = document.body.innerText;
+        var m = t.match(/(?:Created by|Uploaded by)\s*:?[ \t]*\n\s*([^\n]{1,60})/i) || t.match(/(?:Created by|Uploaded by)\s*:?[ \t]*([^\n]{1,60})/i);
+        if (m) a = m[1].trim();
+      }
+      if (!a) { var mm = document.querySelector("meta[name=author]"); if (mm && mm.content) a = mm.content.trim().slice(0, 60); }
+    } catch (e) {}
+    window.open(BASE + "?add=" + encodeURIComponent(location.href) + "&title=" + encodeURIComponent(document.title) + "&author=" + encodeURIComponent(a), "_blank");
+  }
+  function openSettings() {
     const repoUrl = `https://github.com/${cfg.owner}/${cfg.repo}`;
     $("sRepo").href = repoUrl; $("sRepo").textContent = `${cfg.owner}/${cfg.repo}`;
     $("sFile").textContent = `${cfg.path} on ${cfg.branch}`;
+    $("sAuthor").value = state.settings.myAuthor || "";
     const base = location.origin + location.pathname;
-    $("bookmarklet").href = "javascript:(()=>{window.open('" + base + "?add='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title),'_blank')})()";
+    $("bookmarklet").href = "javascript:(" + bookmarkletCode.toString().replace(/\s*\n\s*/g, " ") + ")(" + JSON.stringify(base) + ")";
     setDlg.showModal();
+  }
+  $("settingsBtn").addEventListener("click", openSettings);
+  $("authorForm").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const v = $("sAuthor").value.split(",").map((s) => s.trim()).filter(Boolean).join(", ").slice(0, 120);
+    if (v === (state.settings.myAuthor || "")) { toast("No change to save."); return; }
+    state.settings.myAuthor = v;
+    markDirty(v ? `Set author name to ${v}` : "Clear author name");
+    render();
+    toast(v ? `Links by ${v} now show as Mine` : "Author name cleared");
   });
   $("bookmarklet").addEventListener("click", (ev) => { ev.preventDefault(); toast("Drag this button to your bookmarks bar instead of clicking it."); });
   $("setClose").addEventListener("click", () => setDlg.close());
   $("forgetBtn").addEventListener("click", async () => {
     if (dirty || saving) await flush();
     store.del("ll.token");
-    cfg.token = ""; state.connected = false; state.collections = []; state.games = []; sha = null;
+    cfg.token = ""; state.connected = false; state.collections = []; state.games = []; state.looseTags = []; sha = null;
     imgCache.clear();
     setDlg.close();
     renderGate();
@@ -1379,36 +1786,53 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       try { parsed = JSON.parse(String(r.result)); } catch (e) { toast("That file isn't a Loot Ledger backup."); return; }
       const cols = Array.isArray(parsed && parsed.collections) ? parsed.collections : null;
       if (!cols) { toast("That file isn't a Loot Ledger backup."); return; }
-      // Games: match by name to existing ones, otherwise add (pictures aren't in backups).
-      const gameMap = new Map();
+      // Map a backup's tags into a game's tag list by name.
+      function mergeTags(rawTags, gid) {
+        const map = new Map();
+        const list = tagList(gid);
+        for (const t of normTags(rawTags)) {
+          let m = list.find((x) => x.name.toLowerCase() === t.name.toLowerCase());
+          if (!m) { m = { id: newId(), name: t.name, color: t.color }; list.push(m); }
+          map.set(t.id, m.id);
+        }
+        return map;
+      }
+      const gameMap = new Map(), tagMaps = new Map();
       let gAdded = 0;
       for (const raw of Array.isArray(parsed.games) ? parsed.games : []) {
         if (!raw || typeof raw.name !== "string" || !raw.id) continue;
         let g = state.games.find((x) => x.name.toLowerCase() === raw.name.toLowerCase());
         if (!g) {
           const keepPic = raw.image && typeof raw.image.path === "string" ? { path: raw.image.path, sha: String(raw.image.sha || "") } : null;
-          g = { id: newId(), name: raw.name.slice(0, 80), image: keepPic, createdAt: Number(raw.createdAt) || Date.now() };
+          g = { id: newId(), name: raw.name.slice(0, 80), image: keepPic, tags: [], createdAt: Number(raw.createdAt) || Date.now() };
           state.games.push(g); gAdded++;
         }
         gameMap.set(String(raw.id), g.id);
+        tagMaps.set(String(raw.id), mergeTags(raw.tags, g.id));
       }
+      const looseMap = mergeTags(parsed.looseTags, null);
       let n = 0, firstId = null;
       for (const raw of cols) {
         if (!raw || typeof raw.name !== "string") continue;
         let icon = "";
         try { icon = raw.iconSvg ? cleanSvg(raw.iconSvg) : ""; } catch (e) {}
+        const newGid = raw.gameId ? gameMap.get(String(raw.gameId)) || null : null;
+        const tmap = newGid ? tagMaps.get(String(raw.gameId)) : looseMap;
         const links = (Array.isArray(raw.links) ? raw.links : []).map((l) => {
           const url = normUrl(l && l.url); if (!url) return null;
-          return { id: newId(), url, title: String(l.title || guessTitle(url)).slice(0, 200), note: String(l.note || "").slice(0, 600), addedAt: Number(l.addedAt) || Date.now() };
+          return { id: newId(), url, title: String(l.title || guessTitle(url)).slice(0, 200), author: String(l.author || "").slice(0, 80),
+            tags: (Array.isArray(l.tags) ? l.tags : []).map((t) => tmap && tmap.get(String(t))).filter(Boolean),
+            note: String(l.note || "").slice(0, 600), addedAt: Number(l.addedAt) || Date.now() };
         }).filter(Boolean);
         const now = Date.now();
-        const col = { id: newId(), name: raw.name.slice(0, 60), gameId: raw.gameId ? gameMap.get(String(raw.gameId)) || null : null,
+        const col = { id: newId(), name: raw.name.slice(0, 60), gameId: newGid,
           description: String(raw.description || "").slice(0, 500), iconSvg: icon,
           color: COLORS.includes(raw.color) ? raw.color : "slate", links, createdAt: Number(raw.createdAt) || now, updatedAt: now };
         state.collections.push(col);
         firstId = firstId || col.id;
         n++;
       }
+      if (!state.settings.myAuthor && parsed.settings && parsed.settings.myAuthor) state.settings.myAuthor = String(parsed.settings.myAuthor).slice(0, 120);
       if (!n && !gAdded) { toast("No collections found in that file."); return; }
       setDlg.close();
       markDirty(`Import ${plural(n, "collection")}`);
@@ -1422,7 +1846,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   document.addEventListener("paste", (ev) => {
     const t = ev.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-    if (dlg.open || setDlg.open || gdlg.open) return;
+    if (anyDialogOpen()) return;
     const text = (ev.clipboardData && ev.clipboardData.getData("text")) || "";
     const url = normUrl(text.trim().split(/\s+/)[0]);
     const urlIn = $("addUrl");
