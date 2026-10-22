@@ -194,8 +194,10 @@ button.tag[aria-pressed="true"] { background: var(--c); color: var(--surface); b
 .links { list-style: none; margin: 0; padding: 0; display: grid; }
 .link { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 12px 2px; border-top: 1px solid var(--line); }
 .link:first-child { border-top: 0; }
-.link .ttl { font-weight: 700; font-size: 1rem; overflow-wrap: anywhere; text-decoration: none; color: var(--ink); }
-.link .ttl:hover { color: var(--accent); text-decoration: underline; }
+/* Titles are regular weight at rest and turn heavy on hover. The weight comes from a text-shadow
+   so the title doesn't change width and nudge the rest of the row around. */
+.link .ttl { font-weight: 400; font-size: 1rem; overflow-wrap: anywhere; text-decoration: none; color: var(--ink); transition: color .1s ease, text-shadow .1s ease; }
+.link .ttl:hover, .link .ttl:focus-visible { color: var(--accent); text-shadow: .45px 0 0 currentColor, -.45px 0 0 currentColor, 0 .3px 0 currentColor; }
 .link .line1 { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; min-width: 0; }
 .chip { font-family: var(--f-mono); font-size: .72rem; padding: 1px 6px; border-radius: 4px; background: var(--sunk); color: var(--muted); white-space: nowrap; }
 .chip.nexus { color: var(--c-brass); background: color-mix(in srgb, var(--c-brass) 14%, transparent); }
