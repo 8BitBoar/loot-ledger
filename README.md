@@ -1,3 +1,4 @@
+[README.md](https://github.com/user-attachments/files/33834650/README.md)
 # Loot Ledger
 
 A personal link-collection page. Make collections with a name, description and a [game-icons.net](https://game-icons.net) icon, then add links from any website.
