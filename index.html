@@ -9,11 +9,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral+SC:wght@500;600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: a ledger app. Collection shelf on the left, the open collection on the right; the shelf becomes a scrolling strip on phones. */
+/* Layout: a ledger app. Shelf on the left (My games, then collections grouped by game), the open view on the right; the shelf stacks above on phones. */
 :root {
   --bg: #e9ece6; --surface: #f7f8f4; --sunk: #dfe3db; --ink: #1d2320; --muted: #5c665f;
   --line: #c9cfc4; --accent: #2f4f7f; --accent-ink: #ffffff; --danger: #a23a2a; --ok: #3f6b2a; --warn: #8a6115; --focus: #2f4f7f;
   --c-brass: #9a6f22; --c-lapis: #2f5a9a; --c-moss: #4d6f2e; --c-garnet: #9b2f3a; --c-amethyst: #6b4699; --c-slate: #4d5a63;
+  --shade: rgba(16, 20, 18, .62);
   --f-display: "Spectral SC", "Palatino Linotype", Georgia, serif;
   --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
@@ -24,6 +25,7 @@
     --bg: #131816; --surface: #1b2220; --sunk: #232b28; --ink: #e3e8e2; --muted: #9aa59d;
     --line: #333d39; --accent: #8fb0e3; --accent-ink: #0f1a2b; --danger: #ef8a78; --ok: #98c06a; --warn: #d9ac5a; --focus: #8fb0e3;
     --c-brass: #d9ac5a; --c-lapis: #7fa6e6; --c-moss: #98c06a; --c-garnet: #e37d88; --c-amethyst: #b597e6; --c-slate: #a2b1bb;
+    --shade: rgba(0, 0, 0, .66);
     color-scheme: dark;
   }
 }
@@ -65,38 +67,96 @@ a { color: var(--accent); }
 .btn.danger.armed { background: var(--danger); color: var(--surface); border-color: var(--danger); }
 .btn[disabled] { opacity: .5; cursor: default; }
 
-.layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 18px; align-items: start; }
+.layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 760px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 
-.shelf { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
-.shelf-head { font-family: var(--f-display); font-size: .95rem; letter-spacing: .08em; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
-.col-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.col-item button { width: 100%; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; text-align: left; }
+/* Shelf */
+.shelf { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: grid; gap: 10px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); max-height: calc(100dvh - 40px); overflow-y: auto; }
+@media (max-width: 760px) { .shelf { position: static; max-height: 46dvh; } }
+.home-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; font-family: var(--f-display); font-size: 1.05rem; letter-spacing: .04em; text-align: left; }
+.home-btn:hover { background: var(--sunk); }
+.home-btn[aria-current="true"] { background: var(--sunk); border-color: var(--line); }
+.groups { display: grid; gap: 10px; }
+.group { display: grid; gap: 1px; }
+.group-head { display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; text-align: left; }
+.group-head:hover { background: var(--sunk); }
+.group-head[aria-current="true"] { background: var(--sunk); border-color: var(--line); }
+.group-head .gn { font-family: var(--f-display); font-weight: 600; font-size: .98rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group-label { font-family: var(--f-display); font-size: .9rem; letter-spacing: .06em; color: var(--muted); padding: 4px 8px 2px; }
+.col-list { list-style: none; margin: 0; padding: 0 0 0 14px; display: grid; gap: 1px; border-left: 1px solid var(--line); margin-left: 30px; }
+.group.loose .col-list { margin-left: 8px; padding-left: 0; border-left: 0; }
+.col-item button { width: 100%; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 4px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; cursor: pointer; text-align: left; }
 .col-item button:hover { background: var(--sunk); }
 .col-item button[aria-current="true"] { background: var(--sunk); border-color: var(--line); }
-.col-item .nm { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ct { font-family: var(--f-mono); font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.shelf-empty { color: var(--muted); font-size: .88rem; padding: 4px 2px; }
-@media (max-width: 760px) {
-  .shelf { position: static; }
-  .col-list { grid-auto-flow: column; grid-auto-columns: minmax(180px, 220px); overflow-x: auto; padding-bottom: 4px; }
-}
+.col-item .nm { font-weight: 700; font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct { font-family: var(--f-mono); font-size: .76rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.shelf-empty { color: var(--muted); font-size: .86rem; padding: 2px 8px; }
 
+/* Collection icon tiles */
 .tile { --c: var(--c-slate); width: 34px; height: 34px; border-radius: 6px; flex: none; background: color-mix(in srgb, var(--c) 16%, transparent); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); display: grid; place-items: center; overflow: hidden; }
+.tile.sm { width: 28px; height: 28px; border-radius: 5px; }
 .tile .glyph { width: 76%; height: 76%; background: var(--c); -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; }
 .tile .letter { font-family: var(--f-display); font-weight: 600; color: var(--c); font-size: 1.05rem; line-height: 1; }
+.tile.sm .letter { font-size: .9rem; }
 .tile.lg { width: 76px; height: 76px; border-radius: 10px; }
 .tile.lg .letter { font-size: 2.2rem; }
 
+/* Game art */
+.art { position: relative; width: 100%; aspect-ratio: 16 / 9; background: linear-gradient(135deg, var(--sunk), color-mix(in srgb, var(--accent) 18%, var(--sunk))); overflow: hidden; display: grid; place-items: center; max-width: 100%; }
+.art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.art .art-letter { font-family: var(--f-display); font-weight: 600; color: var(--muted); font-size: 2.4rem; line-height: 1; }
+.art.thumb { width: 46px; aspect-ratio: 16 / 10; border-radius: 4px; }
+.art.thumb .art-letter { font-size: 1rem; }
+.art.mini { width: 36px; aspect-ratio: 16 / 10; border-radius: 3px; display: inline-grid; vertical-align: middle; }
+.art.mini .art-letter { font-size: .8rem; }
+.art.banner { aspect-ratio: 16 / 5; border-radius: 8px 8px 0 0; }
+.art.banner .art-letter { font-size: 4rem; }
+@media (max-width: 560px) { .art.banner { aspect-ratio: 16 / 7; } }
+.art.preview { width: 220px; border-radius: 6px; border: 1px solid var(--line); }
+
+/* Panel */
 .panel { display: grid; gap: 16px; min-width: 0; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px; min-width: 0; }
+.view-head { display: flex; justify-content: space-between; align-items: end; gap: 12px; flex-wrap: wrap; }
+.view-head h2 { font-family: var(--f-display); font-weight: 600; font-size: 1.75rem; line-height: 1.15; margin: 0; }
+.section-label { font-family: var(--f-display); font-size: 1.05rem; letter-spacing: .05em; color: var(--muted); margin: 6px 0 0; }
 
+/* Game cards */
+.game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+.game-card { display: grid; grid-template-rows: auto 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; cursor: pointer; text-align: left; padding: 0; transition: transform .12s ease, border-color .12s ease; }
+.game-card:hover { transform: translateY(-2px); border-color: var(--muted); }
+.game-card .body { padding: 10px 12px 12px; display: grid; gap: 2px; }
+.game-card .gname { font-family: var(--f-display); font-weight: 600; font-size: 1.1rem; line-height: 1.2; overflow-wrap: anywhere; }
+.game-card .gmeta { font-family: var(--f-mono); font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.add-card { border: 1px dashed var(--line); border-radius: 8px; background: transparent; display: grid; place-items: center; gap: 4px; min-height: 160px; cursor: pointer; color: var(--muted); font-weight: 700; padding: 16px; text-align: center; }
+.add-card:hover { border-color: var(--accent); color: var(--accent); }
+.add-card .plus { font-size: 1.8rem; line-height: 1; font-family: var(--f-display); }
+
+/* Game view */
+.game-hero { padding: 0; overflow: hidden; }
+.game-hero .info { padding: 16px 18px 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.game-hero h2 { font-family: var(--f-display); font-weight: 600; font-size: 2rem; line-height: 1.1; margin: 0; overflow-wrap: anywhere; text-wrap: balance; }
+.game-hero .meta { margin-top: 6px; font-family: var(--f-mono); font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 560px) { .game-hero .info { grid-template-columns: minmax(0, 1fr); } .acts { justify-content: flex-start; } }
+.col-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.col-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; cursor: pointer; text-align: left; }
+.col-card:hover { border-color: var(--muted); }
+.col-card .cname { font-weight: 700; overflow-wrap: anywhere; }
+.col-card .cdesc { font-size: .86rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.col-card .ccount { font-family: var(--f-mono); font-size: .74rem; color: var(--muted); margin-top: 4px; }
+.col-grid .add-card { min-height: 92px; }
+
+/* Collection view */
+.crumb { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: var(--muted); flex-wrap: wrap; }
+.crumb button { background: none; border: 0; padding: 0; cursor: pointer; color: var(--accent); font: inherit; display: inline-flex; align-items: center; gap: 6px; }
+.crumb button:hover { text-decoration: underline; }
 .col-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: start; }
 .col-head h2 { font-family: var(--f-display); font-weight: 600; font-size: 1.75rem; line-height: 1.15; margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
 .col-head .desc { margin: 6px 0 0; max-width: 65ch; white-space: pre-wrap; overflow-wrap: anywhere; }
 .col-head .desc.none { color: var(--muted); font-style: italic; }
 .col-head .meta { margin-top: 8px; font-size: .8rem; color: var(--muted); font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
-.col-head .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.col-head .main { min-width: 0; display: grid; gap: 4px; }
 @media (max-width: 560px) { .col-head { grid-template-columns: auto minmax(0, 1fr); } .col-head .acts { grid-column: 1 / -1; justify-content: flex-start; } }
 
 .add { display: grid; gap: 10px; }
@@ -143,7 +203,7 @@ a { color: var(--accent); }
 .connect { display: grid; gap: 10px; width: 100%; max-width: 520px; }
 .connect .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 @media (max-width: 480px) { .connect .pair { grid-template-columns: minmax(0, 1fr); } }
-label.lbl { font-weight: 700; font-size: .88rem; display: grid; gap: 4px; }
+label.lbl, .lbl { font-weight: 700; font-size: .88rem; display: grid; gap: 4px; }
 
 dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); }
 dialog::backdrop { background: rgba(10, 14, 12, .45); }
@@ -151,7 +211,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
 .dlg h3 { font-family: var(--f-display); font-weight: 600; font-size: 1.35rem; margin: 0; }
 .icon-pick { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: start; }
 .icon-pick .ops { display: grid; gap: 8px; min-width: 0; }
-.icon-pick .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .swatches { display: flex; gap: 8px; flex-wrap: wrap; border: 0; padding: 0; margin: 0; }
 .swatches legend { font-weight: 700; font-size: .88rem; padding: 0; margin-bottom: 6px; }
 .sw { position: relative; }
@@ -159,6 +219,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
 .sw span { display: block; width: 28px; height: 28px; border-radius: 50%; background: var(--c); border: 3px solid var(--surface); box-shadow: 0 0 0 1px var(--line); }
 .sw input:checked + span { box-shadow: 0 0 0 2px var(--ink); }
 .sw input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 3px; }
+.pic-pick { display: grid; gap: 8px; justify-items: start; }
 .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .err { color: var(--danger); font-size: .85rem; }
 .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; font-size: .9rem; }
@@ -176,14 +237,14 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     <div class="brand"><h1>Loot Ledger</h1><span class="status" id="status" data-s="idle">Not connected</span></div>
     <div class="top-actions" id="topActions" hidden>
       <button class="btn" id="settingsBtn" type="button">Settings</button>
+      <button class="btn" id="newGameBtn" type="button">+ New game</button>
       <button class="btn primary" id="newColBtn" type="button">+ New collection</button>
     </div>
   </header>
   <div class="layout" id="layout" hidden>
-    <aside class="shelf" aria-label="Collections">
-      <div class="shelf-head"><span>Collections</span><span class="ct" id="colCount"></span></div>
-      <ul class="col-list" id="colList"></ul>
-      <div class="shelf-empty" id="shelfEmpty">No collections yet.</div>
+    <aside class="shelf" aria-label="Games and collections">
+      <button class="home-btn" id="homeBtn" type="button"><span>My games</span><span class="ct" id="gameCount"></span></button>
+      <div class="groups" id="groups"></div>
     </aside>
     <main class="panel" id="panel"></main>
   </div>
@@ -194,7 +255,10 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   <form class="dlg" id="colForm">
     <h3 id="dlgTitle">New collection</h3>
     <label class="lbl">Name
-      <input class="field" id="fName" maxlength="60" required placeholder="e.g. Skyrim armor mods">
+      <input class="field" id="fName" maxlength="60" required placeholder="e.g. Armor mods">
+    </label>
+    <label class="lbl">Game
+      <select class="field" id="fGame"></select>
     </label>
     <label class="lbl">Description
       <textarea class="field" id="fDesc" rows="3" maxlength="500" placeholder="What goes in here, load order notes, anything."></textarea>
@@ -224,6 +288,32 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   </form>
 </dialog>
 
+<dialog id="gameDialog">
+  <form class="dlg" id="gameForm">
+    <h3 id="gTitle">New game</h3>
+    <label class="lbl">Game name
+      <input class="field" id="gName" maxlength="80" required placeholder="e.g. Skyrim Special Edition">
+    </label>
+    <div class="lbl">Picture
+      <div class="pic-pick">
+        <div class="art preview" id="gPreview"><span class="art-letter">?</span></div>
+        <div class="btns">
+          <label class="btn" for="gFile">Upload picture</label>
+          <input type="file" id="gFile" accept="image/*" hidden>
+          <button class="btn ghost" type="button" id="gClear">Remove picture</button>
+        </div>
+        <div class="hint">Any image works: box art, a screenshot, a Steam header. It's shown wide (16:9) and resized before upload, so big files are fine.</div>
+        <div class="err" id="gPicErr" hidden></div>
+      </div>
+    </div>
+    <div class="err" id="gErr" hidden></div>
+    <div class="dlg-foot">
+      <button class="btn" type="button" id="gCancel">Cancel</button>
+      <button class="btn primary" type="submit" id="gSave">Add game</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="setDialog">
   <div class="dlg">
     <h3>Settings</h3>
@@ -239,7 +329,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     </div>
     <div style="display:grid;gap:6px">
       <strong>Backups</strong>
-      <div class="hint">Every save is already a commit in your private repo. These are for an extra copy or moving data.</div>
+      <div class="hint">Every save is already a commit in your private repo. These are for an extra copy or moving data. Game pictures stay in the repo's images folder and aren't part of the backup file.</div>
       <div class="dlg-foot" style="justify-content:flex-start">
         <button class="btn" type="button" id="exportBtn">Download backup</button>
         <button class="btn" type="button" id="importBtn">Import backup</button>
@@ -269,6 +359,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
 
   const COLORS = ["brass", "lapis", "moss", "garnet", "amethyst", "slate"];
   const API = "https://api.github.com";
+  const NO_GAME = "__none";
   const $ = (id) => document.getElementById(id);
 
   const store = {
@@ -285,16 +376,22 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     token: store.get("ll.token") || "",
   };
 
+  function readView() {
+    try { const v = JSON.parse(store.get("ll.view") || "null"); if (v && v.type) return v; } catch (e) {}
+    const legacy = store.get("ll.active");
+    return legacy ? { type: "col", id: legacy } : { type: "home" };
+  }
+
   const state = {
     connected: false,
-    collections: [], activeId: store.get("ll.active") || null,
+    games: [], collections: [],
+    view: readView(),
     filter: "", sort: "new",
-    editingLinkId: null, deleteArmed: false,
+    editingLinkId: null, deleteArmed: false, gameDeleteArmed: false,
     dialogMode: null, dialogIcon: "",
     quick: null,
   };
 
-  // Link passed in by the bookmarklet: ?add=<url>&title=<title>
   (function readQuery() {
     try {
       const q = new URLSearchParams(location.search);
@@ -318,8 +415,14 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
   const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
   const getCol = (id) => state.collections.find((c) => c.id === id);
+  const getGame = (id) => state.games.find((g) => g.id === id);
+  const gameOf = (col) => (col && col.gameId ? getGame(col.gameId) : null) || null;
+  const colsOf = (gameId) => state.collections.filter((c) => gameId === NO_GAME ? !gameOf(c) : c.gameId === gameId);
+  const sortedGames = () => state.games.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  const linkCount = (cols) => cols.reduce((n, c) => n + (c.links || []).length, 0);
   const fmtDate = (t) => { try { return new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }); } catch (e) { return ""; } };
   const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const initial = (s) => ((s || "?").trim().charAt(0).toUpperCase() || "?");
 
   function normUrl(raw) {
     let s = (raw || "").trim();
@@ -349,7 +452,6 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     } catch (e) { return url; }
   }
   function cleanTitle(t) {
-    // Strip common site suffixes from page titles sent by the bookmarklet
     return (t || "").replace(/\s+at\s+[^|]+Nexus\s*-\s*Mods and Community\s*$/i, "")
       .replace(/\s*[|–-]\s*Nexus Mods.*$/i, "").replace(/^Steam Workshop::/i, "").trim().slice(0, 200);
   }
@@ -374,9 +476,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       const g = h("div", { class: "glyph" });
       g.style.setProperty("--m", `url("data:image/svg+xml,${encodeURIComponent(col.iconSvg)}")`);
       t.append(g);
-    } else {
-      t.append(h("span", { class: "letter", text: ((col && col.name) || "?").trim().charAt(0).toUpperCase() || "?" }));
-    }
+    } else t.append(h("span", { class: "letter", text: initial(col && col.name) }));
     return t;
   }
 
@@ -393,12 +493,12 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   $("toastAct").addEventListener("click", () => { const f = toastUndo; $("toast").hidden = true; toastUndo = null; if (f) f(); });
 
   /* ===== GitHub storage ===== */
-  function b64encode(str) {
-    const bytes = new TextEncoder().encode(str);
+  function b64encodeBytes(bytes) {
     let bin = "";
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
     return btoa(bin);
   }
+  const b64encode = (str) => b64encodeBytes(new TextEncoder().encode(str));
   function b64decode(b64) {
     const bin = atob(b64.replace(/\s/g, ""));
     const bytes = new Uint8Array(bin.length);
@@ -419,7 +519,8 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     });
   }
   const repoPath = () => `/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}`;
-  const filePath = () => `${repoPath()}/contents/${cfg.path.split("/").map(encodeURIComponent).join("/")}`;
+  const contentsPath = (p) => `${repoPath()}/contents/${p.split("/").map(encodeURIComponent).join("/")}`;
+  const filePath = () => contentsPath(cfg.path);
 
   class GhError extends Error { constructor(msg, kind) { super(msg); this.kind = kind; } }
 
@@ -455,12 +556,19 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
 
   function serialize() {
-    return JSON.stringify({ app: "loot-ledger", version: 1, collections: state.collections }, null, 2) + "\n";
+    return JSON.stringify({ app: "loot-ledger", version: 2, games: state.games, collections: state.collections }, null, 2) + "\n";
   }
   function applyData(data) {
+    const games = Array.isArray(data && data.games) ? data.games : [];
+    state.games = games.filter((g) => g && g.id && typeof g.name === "string").map((g) => ({
+      id: String(g.id), name: g.name,
+      image: g.image && typeof g.image.path === "string" ? { path: g.image.path, sha: String(g.image.sha || "") } : null,
+      createdAt: Number(g.createdAt) || 0,
+    }));
     const cols = Array.isArray(data && data.collections) ? data.collections : [];
     state.collections = cols.filter((c) => c && c.id && typeof c.name === "string").map((c) => ({
-      id: String(c.id), name: c.name, description: c.description || "", iconSvg: c.iconSvg || "",
+      id: String(c.id), name: c.name, gameId: c.gameId ? String(c.gameId) : null,
+      description: c.description || "", iconSvg: c.iconSvg || "",
       color: COLORS.includes(c.color) ? c.color : "slate",
       links: (Array.isArray(c.links) ? c.links : []).filter((l) => l && normUrl(l.url)).map((l) => ({
         id: String(l.id || newId()), url: normUrl(l.url), title: l.title || "", note: l.note || "", addedAt: Number(l.addedAt) || 0,
@@ -468,7 +576,6 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       createdAt: Number(c.createdAt) || 0, updatedAt: Number(c.updatedAt) || 0,
     }));
   }
-
   async function load() {
     const f = await readFile();
     sha = f ? f.sha : null;
@@ -476,8 +583,71 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     lastFetch = Date.now();
   }
 
-  // Saving: changes are batched, then written as one commit.
-  let dirty = false, saving = false, again = false, saveTimer = null, lastAction = "Update collections";
+  /* ----- game pictures: stored as files under images/ in the data repo ----- */
+  const imgCache = new Map();
+  function imageURL(path) {
+    if (!imgCache.has(path)) {
+      const p = (async () => {
+        const r = await gh(contentsPath(path) + "?ref=" + encodeURIComponent(cfg.branch), { headers: { Accept: "application/vnd.github.raw+json" } });
+        if (!r.ok) throw new Error("image " + r.status);
+        return URL.createObjectURL(await r.blob());
+      })().catch(() => { imgCache.delete(path); return null; });
+      imgCache.set(path, p);
+    }
+    return imgCache.get(path);
+  }
+  function gameArt(game, cls) {
+    const box = h("div", { class: "art" + (cls ? " " + cls : ""), "aria-hidden": "true" }, h("span", { class: "art-letter", text: initial(game && game.name) }));
+    if (game && game.image && game.image.path) {
+      imageURL(game.image.path).then((u) => { if (u) box.append(h("img", { src: u, alt: "" })); });
+    }
+    return box;
+  }
+  function resizeImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const max = 1280;
+        const scale = Math.min(1, max / img.naturalWidth, max / img.naturalHeight);
+        const w = Math.max(1, Math.round(img.naturalWidth * scale)), hgt = Math.max(1, Math.round(img.naturalHeight * scale));
+        const c = document.createElement("canvas");
+        c.width = w; c.height = hgt;
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#1b2220"; ctx.fillRect(0, 0, w, hgt);
+        ctx.drawImage(img, 0, 0, w, hgt);
+        URL.revokeObjectURL(url);
+        c.toBlob((b) => b ? resolve(b) : reject(new Error("Couldn't process that picture.")), "image/jpeg", 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That file isn't a picture this browser can open.")); };
+      img.src = url;
+    });
+  }
+  async function uploadImage(gameId, blob, gameName) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const path = `images/${gameId}-${Date.now().toString(36)}.jpg`;
+    const body = JSON.stringify({ message: `Add picture for ${gameName}`, content: b64encodeBytes(bytes), branch: cfg.branch });
+    let r;
+    try {
+      r = await gh(contentsPath(path), { method: "PUT", body });
+      // 409 = another save landed on the branch at the same moment; try once more.
+      if (r.status === 409) { await new Promise((ok) => setTimeout(ok, 800)); r = await gh(contentsPath(path), { method: "PUT", body }); }
+    } catch (e) { throw new Error("Couldn't reach GitHub to upload the picture."); }
+    if (!r.ok) throw new Error(`GitHub refused the picture upload (error ${r.status}).`);
+    const j = await r.json();
+    imgCache.set(path, Promise.resolve(URL.createObjectURL(blob)));
+    return { path, sha: j.content.sha };
+  }
+  async function deleteImage(image, gameName) {
+    if (!image || !image.path || !image.sha) return;
+    try {
+      await gh(contentsPath(image.path), { method: "DELETE", body: JSON.stringify({ message: `Remove picture for ${gameName}`, sha: image.sha, branch: cfg.branch }) });
+    } catch (e) {}
+  }
+
+  /* ----- saving collections.json: batched into one commit ----- */
+  let dirty = false, saving = false, again = false, saveTimer = null, lastAction = "Update collections", overwroteRemote = false;
+  let afterSave = null;
   function setStatus(s, extra) {
     const el = $("status");
     el.dataset.s = s;
@@ -499,7 +669,6 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     try { r = await gh(filePath(), { method: "PUT", body: JSON.stringify(body) }); }
     catch (e) { throw new GhError("Couldn't reach GitHub. Your changes are kept on this page; Retry when you're back online.", "network"); }
     if ((r.status === 409 || r.status === 422) && retry) {
-      // The file changed on GitHub (another computer). Get its new version id and write ours on top.
       const cur = await readFile();
       sha = cur ? cur.sha : null;
       overwroteRemote = true;
@@ -512,7 +681,6 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     sha = j.content && j.content.sha;
     lastFetch = Date.now();
   }
-  let overwroteRemote = false;
   async function flush() {
     clearTimeout(saveTimer);
     if (saving) { again = true; return; }
@@ -523,7 +691,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       await putFile(true);
       setStatus(dirty ? "pending" : "saved");
       if (overwroteRemote) toast("Saved. This replaced changes made on another computer since this page loaded.");
-      if (pendingQuickDone) { pendingQuickDone(); pendingQuickDone = null; }
+      if (afterSave) { const f = afterSave; afterSave = null; f(); }
     } catch (e) {
       dirty = true;
       setStatus("error", e.message.length > 60 ? "Save failed" : e.message);
@@ -535,10 +703,9 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   }
   window.addEventListener("beforeunload", (ev) => { if (dirty || saving) { ev.preventDefault(); ev.returnValue = ""; } });
 
-  // Pick up changes made on another computer when you come back to this tab.
   async function refreshIfIdle() {
     if (!state.connected || dirty || saving || state.editingLinkId) return;
-    if ($("colDialog").open || Date.now() - lastFetch < 15000) return;
+    if ($("colDialog").open || $("gameDialog").open || Date.now() - lastFetch < 15000) return;
     try {
       const f = await readFile();
       lastFetch = Date.now();
@@ -549,7 +716,6 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfIdle(); });
   window.addEventListener("focus", refreshIfIdle);
 
-  /* ===== mutations ===== */
   function mutateLinks(colId, mut, action) {
     const c = getCol(colId);
     if (!c) return;
@@ -620,61 +786,146 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     render();
   }
 
-  /* ===== rendering ===== */
-  let panelBuiltFor = null, headEl, listEl, countEl;
-
-  function setActive(id) {
-    if (state.activeId !== id) { state.filter = ""; state.editingLinkId = null; state.deleteArmed = false; panelBuiltFor = null; }
-    state.activeId = id;
-    store.set("ll.active", id || "");
+  /* ===== navigation ===== */
+  function go(view) {
+    const same = state.view.type === view.type && state.view.id === view.id;
+    if (!same) { state.filter = ""; state.editingLinkId = null; state.deleteArmed = false; state.gameDeleteArmed = false; panelBuiltFor = null; }
+    state.view = view;
+    store.set("ll.view", JSON.stringify(view));
     render();
+    if (!same) window.scrollTo({ top: 0 });
+  }
+  $("homeBtn").addEventListener("click", () => go({ type: "home" }));
+
+  /* ===== shelf ===== */
+  function renderShelf() {
+    $("homeBtn").setAttribute("aria-current", state.view.type === "home" ? "true" : "false");
+    $("gameCount").textContent = state.games.length ? String(state.games.length) : "";
+    const colItem = (c) => h("li", { class: "col-item" },
+      h("button", { type: "button", "aria-current": state.view.type === "col" && state.view.id === c.id ? "true" : "false", onclick: () => go({ type: "col", id: c.id }) },
+        tile(c, "sm"), h("span", { class: "nm", text: c.name || "Untitled" }), h("span", { class: "ct", text: String((c.links || []).length) })));
+    const groups = sortedGames().map((g) => {
+      const cols = colsOf(g.id);
+      return h("div", { class: "group" },
+        h("button", { class: "group-head", type: "button", "aria-current": state.view.type === "game" && state.view.id === g.id ? "true" : "false", onclick: () => go({ type: "game", id: g.id }) },
+          gameArt(g, "thumb"), h("span", { class: "gn", text: g.name }), h("span", { class: "ct", text: String(cols.length) })),
+        cols.length ? h("ul", { class: "col-list" }, cols.map(colItem)) : null);
+    });
+    const loose = colsOf(NO_GAME);
+    if (loose.length) groups.push(h("div", { class: "group loose" }, h("div", { class: "group-label", text: state.games.length ? "No game" : "Collections" }), h("ul", { class: "col-list" }, loose.map(colItem))));
+    if (!groups.length) groups.push(h("div", { class: "shelf-empty", text: "No games or collections yet." }));
+    $("groups").replaceChildren(...groups);
   }
 
-  function renderShelf() {
-    $("colList").replaceChildren(...state.collections.map((c) =>
-      h("li", { class: "col-item" },
-        h("button", { type: "button", "aria-current": c.id === state.activeId ? "true" : "false", onclick: () => setActive(c.id) },
-          tile(c), h("span", { class: "nm", text: c.name || "Untitled" }), h("span", { class: "ct", text: String((c.links || []).length) })))));
-    $("shelfEmpty").hidden = state.collections.length > 0;
-    $("colCount").textContent = state.collections.length ? String(state.collections.length) : "";
-  }
+  /* ===== views ===== */
+  let panelBuiltFor = null, headEl, listEl, countEl;
 
   function render() {
     if (!state.connected) return;
+    const v = state.view;
+    if (v.type === "col" && !getCol(v.id)) state.view = { type: "home" };
+    if (v.type === "game" && !getGame(v.id)) state.view = { type: "home" };
     renderShelf();
-    const panel = $("panel");
-    const col = getCol(state.activeId);
-    if (!col && state.collections.length) { state.activeId = state.collections[0].id; return render(); }
-    if (!col) {
-      panelBuiltFor = null;
-      panel.replaceChildren(...[quickCard(), h("div", { class: "card state" },
-        h("h2", { text: "Start your first collection" }),
-        h("p", { text: "A collection is a named list of links from anywhere: Nexus mod pages, Steam Workshop items, GitHub repos, guides, wikis." }),
-        h("ol", null,
-          h("li", { text: "Create a collection with a name, a description and an icon from game-icons.net." }),
-          h("li", { text: "Paste links into it, or use the bookmark button from Settings to add the page you're on." }),
-          h("li", { text: "Open this page on another computer, connect once, and everything is there." })),
-        h("button", { class: "btn primary", type: "button", onclick: () => openDialog(null) }, "+ New collection"))].filter(Boolean));
-      return;
-    }
-    if (panelBuiltFor !== col.id) buildPanel(col);
-    renderHead(col);
-    if (!state.editingLinkId) renderLinks(col);
+    if (state.view.type === "col") renderColView(getCol(state.view.id));
+    else { panelBuiltFor = null; state.view.type === "game" ? renderGameView(getGame(state.view.id)) : renderHome(); }
   }
 
-  /* Bookmarklet quick-add card */
-  let pendingQuickDone = null;
-  function quickCard() {
-    if (!state.quick) return null;
+  function gameCard(g) {
+    const cols = colsOf(g.id);
+    return h("button", { class: "game-card", type: "button", onclick: () => go({ type: "game", id: g.id }) },
+      gameArt(g),
+      h("div", { class: "body" },
+        h("div", { class: "gname", text: g.name }),
+        h("div", { class: "gmeta", text: `${plural(cols.length, "collection")} · ${plural(linkCount(cols), "link")}` })));
+  }
+  function colCard(c) {
+    return h("button", { class: "col-card", type: "button", onclick: () => go({ type: "col", id: c.id }) },
+      tile(c),
+      h("div", { style: "min-width:0" },
+        h("div", { class: "cname", text: c.name || "Untitled" }),
+        c.description ? h("div", { class: "cdesc", text: c.description }) : null,
+        h("div", { class: "ccount", text: plural((c.links || []).length, "link") })));
+  }
+  function addCard(label, onclick) {
+    return h("button", { class: "add-card", type: "button", onclick }, h("span", { class: "plus", text: "+" }), h("span", { text: label }));
+  }
+
+  function renderHome() {
+    const panel = $("panel");
+    if (!state.games.length && !state.collections.length) {
+      panel.replaceChildren(...[quickNode(), h("div", { class: "card state" },
+        h("h2", { text: "Start your ledger" }),
+        h("p", { text: "Add the games you mod, then make collections of links for each one: Nexus mod pages, Steam Workshop items, GitHub repos, guides, wikis." }),
+        h("ol", null,
+          h("li", { text: "Add a game and give it a picture." }),
+          h("li", { text: "Create a collection for that game, with a name, description and an icon from game-icons.net." }),
+          h("li", { text: "Paste links into it, or use the bookmark button from Settings to add the page you're on." })),
+        h("div", { class: "btns" },
+          h("button", { class: "btn primary", type: "button", onclick: () => openGameDialog(null) }, "+ Add a game"),
+          h("button", { class: "btn", type: "button", onclick: () => openDialog(null) }, "+ New collection")))].filter(Boolean));
+      return;
+    }
+    const loose = colsOf(NO_GAME);
+    panel.replaceChildren(...[
+      quickNode(),
+      h("div", { class: "view-head" }, h("h2", { text: "My games" }),
+        h("span", { class: "hint", text: `${plural(state.games.length, "game")} · ${plural(state.collections.length, "collection")} · ${plural(linkCount(state.collections), "link")}` })),
+      h("div", { class: "game-grid" }, ...sortedGames().map(gameCard), addCard("Add a game", () => openGameDialog(null))),
+      loose.length ? h("h3", { class: "section-label", text: "Collections without a game" }) : null,
+      loose.length ? h("div", { class: "col-grid" }, ...loose.map(colCard)) : null,
+    ].filter(Boolean));
+  }
+
+  function renderGameView(g) {
+    const cols = colsOf(g.id);
+    const del = h("button", { class: "btn danger" + (state.gameDeleteArmed ? " armed" : ""), type: "button", onclick: () => {
+      if (!state.gameDeleteArmed) {
+        state.gameDeleteArmed = true; render();
+        setTimeout(() => { if (state.gameDeleteArmed) { state.gameDeleteArmed = false; render(); } }, 5000);
+        return;
+      }
+      deleteGame(g.id);
+    } }, state.gameDeleteArmed ? (cols.length ? `Delete game (keeps its ${plural(cols.length, "collection")})` : "Delete for good") : "Delete");
+    $("panel").replaceChildren(...[
+      quickNode(),
+      h("section", { class: "card game-hero" },
+        gameArt(g, "banner"),
+        h("div", { class: "info" },
+          h("div", { style: "min-width:0" },
+            h("h2", { text: g.name }),
+            h("div", { class: "meta", text: `${plural(cols.length, "collection")} · ${plural(linkCount(cols), "link")}` })),
+          h("div", { class: "acts" }, h("button", { class: "btn", type: "button", onclick: () => openGameDialog(g.id) }, "Edit"), del))),
+      h("div", { class: "col-grid" }, ...cols.map(colCard), addCard("New collection for this game", () => openDialog(null, { gameId: g.id }))),
+    ].filter(Boolean));
+  }
+
+  /* ----- bookmarklet quick-add card (kept as one node so typing survives re-renders) ----- */
+  let quickEl = null, quickSel = null;
+  function fillQuickSelect(sel) {
+    const keep = sel.value;
+    const opts = [];
+    for (const g of sortedGames()) {
+      const cols = colsOf(g.id);
+      if (cols.length) opts.push(h("optgroup", { label: g.name }, cols.map((c) => h("option", { value: c.id }, c.name || "Untitled"))));
+    }
+    const loose = colsOf(NO_GAME);
+    if (loose.length) opts.push(h("optgroup", { label: state.games.length ? "No game" : "Collections" }, loose.map((c) => h("option", { value: c.id }, c.name || "Untitled"))));
+    opts.push(h("option", { value: "__new" }, "+ New collection…"));
+    sel.replaceChildren(...opts);
+    if (keep && [...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  }
+  function quickNode() {
+    if (!state.quick) { quickEl = null; return null; }
+    if (quickEl) { fillQuickSelect(quickSel); return quickEl; }
     const q = state.quick;
     const urlIn = h("input", { class: "field mono", id: "qUrl", "aria-label": "Link URL" }); urlIn.value = q.url;
     const titleIn = h("input", { class: "field", id: "qTitle", maxlength: "200", "aria-label": "Title" }); titleIn.value = cleanTitle(q.title) || guessTitle(normUrl(q.url) || q.url);
     const noteIn = h("input", { class: "field", id: "qNote", maxlength: "600", placeholder: "Note (optional)", "aria-label": "Note" });
-    const sel = h("select", { class: "field", id: "qCol", "aria-label": "Collection" },
-      ...state.collections.map((c) => h("option", { value: c.id }, c.name || "Untitled")),
-      h("option", { value: "__new" }, "+ New collection…"));
+    const sel = quickSel = h("select", { class: "field", id: "qCol", "aria-label": "Collection" });
+    fillQuickSelect(sel);
     const last = store.get("ll.lastQuick");
-    if (last && getCol(last)) sel.value = last; else if (state.activeId && getCol(state.activeId)) sel.value = state.activeId;
+    if (last && getCol(last)) sel.value = last;
+    else if (state.view.type === "col" && getCol(state.view.id)) sel.value = state.view.id;
     if (!state.collections.length) sel.value = "__new";
     const err = h("div", { class: "err", hidden: true });
     const card = h("form", { class: "card add quick" },
@@ -689,7 +940,8 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       const url = normUrl(urlIn.value);
       if (!url) { err.textContent = "That address isn't a web link."; err.hidden = false; return; }
       if (sel.value === "__new") {
-        openDialog(null, { afterCreate: (id) => { sel.append(h("option", { value: id }, getCol(id).name)); sel.value = id; card.requestSubmit(); } });
+        const gid = state.view.type === "game" ? state.view.id : null;
+        openDialog(null, { gameId: gid, afterCreate: (id) => { fillQuickSelect(sel); sel.value = id; card.requestSubmit(); } });
         return;
       }
       const c = getCol(sel.value);
@@ -698,16 +950,26 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       state.quick = null;
       mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
       panelBuiltFor = null;
-      setActive(c.id);
-      pendingQuickDone = () => toast(`Saved to ${c.name}. You can close this tab.`);
+      go({ type: "col", id: c.id });
+      afterSaveQueue(() => toast(`Saved to ${c.name}. You can close this tab.`));
       flush();
     });
+    quickEl = card;
     return card;
   }
 
-  function buildPanel(col) {
+  /* ----- collection view ----- */
+  function renderColView(col) {
+    if (panelBuiltFor !== col.id) buildColPanel(col);
+    else if (state.quick && quickEl && !quickEl.isConnected) $("panel").prepend(quickNode());
+    else if (quickEl) fillQuickSelect(quickSel);
+    renderHead(col);
+    if (!state.editingLinkId) renderLinks(col);
+  }
+
+  function buildColPanel(col) {
     panelBuiltFor = col.id;
-    headEl = h("section", { class: "card col-head" });
+    headEl = h("section", { class: "card", style: "display:grid;gap:12px" });
     const urlIn = h("input", { class: "field mono", id: "addUrl", placeholder: "Paste a link (https://…)", autocomplete: "off", inputmode: "url", "aria-label": "Link URL" });
     const titleIn = h("input", { class: "field", id: "addTitle", placeholder: "Title (optional)", maxlength: "200", "aria-label": "Link title" });
     const noteIn = h("input", { class: "field", id: "addNote", placeholder: "Note (optional), e.g. needs SKSE, install after USSEP", maxlength: "600", "aria-label": "Note" });
@@ -722,7 +984,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       ev.preventDefault();
       const url = normUrl(urlIn.value);
       if (!url) { err.textContent = "Enter a web address, like https://www.nexusmods.com/…"; err.hidden = false; urlIn.focus(); return; }
-      const c = getCol(state.activeId);
+      const c = getCol(state.view.id);
       if (!c) return;
       const dupe = (c.links || []).some((l) => l.url === url);
       mutateLinks(c.id, (links) => links.push({ id: newId(), url, title: titleIn.value.trim() || guessTitle(url), note: noteIn.value.trim(), addedAt: Date.now() }), `Add link to ${c.name}`);
@@ -733,20 +995,21 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
 
     const search = h("input", { class: "field", id: "linkSearch", type: "search", placeholder: "Search this collection", "aria-label": "Search links" });
     search.value = state.filter;
-    search.addEventListener("input", () => { state.filter = search.value; renderLinks(getCol(state.activeId)); });
+    search.addEventListener("input", () => { state.filter = search.value; renderLinks(getCol(state.view.id)); });
     const sort = h("select", { class: "field", id: "linkSort", "aria-label": "Sort links" },
       h("option", { value: "new" }, "Newest first"), h("option", { value: "old" }, "Oldest first"),
       h("option", { value: "az" }, "Title A–Z"), h("option", { value: "site" }, "By site"));
     sort.value = state.sort;
-    sort.addEventListener("change", () => { state.sort = sort.value; renderLinks(getCol(state.activeId)); });
+    sort.addEventListener("change", () => { state.sort = sort.value; renderLinks(getCol(state.view.id)); });
     countEl = h("span", { class: "hint" });
     listEl = h("ol", { class: "links" });
     const listCard = h("section", { class: "card", style: "display:grid;gap:10px" }, h("div", { class: "tools" }, search, sort, countEl), listEl);
-    $("panel").replaceChildren(...[quickCard(), headEl, form, listCard].filter(Boolean));
+    $("panel").replaceChildren(...[quickNode(), headEl, form, listCard].filter(Boolean));
   }
 
   function renderHead(col) {
     const n = (col.links || []).length;
+    const g = gameOf(col);
     const del = h("button", { class: "btn danger" + (state.deleteArmed ? " armed" : ""), type: "button", onclick: () => {
       if (!state.deleteArmed) {
         state.deleteArmed = true; renderHead(col);
@@ -755,13 +1018,19 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       }
       deleteCollection(col.id);
     } }, state.deleteArmed ? `Delete for good (${plural(n, "link")})` : "Delete");
-    headEl.replaceChildren(
-      tile(col, "lg"),
-      h("div", { style: "min-width:0" },
-        h("h2", { text: col.name || "Untitled" }),
-        h("p", { class: "desc" + (col.description ? "" : " none"), text: col.description || "No description." }),
-        h("div", { class: "meta", text: `${plural(n, "link")} · created ${fmtDate(col.createdAt)}` })),
-      h("div", { class: "acts" }, h("button", { class: "btn", type: "button", onclick: () => openDialog(col.id) }, "Edit"), del));
+    const crumb = h("div", { class: "crumb" },
+      h("button", { type: "button", onclick: () => go({ type: "home" }) }, "My games"),
+      h("span", { text: "›", "aria-hidden": "true" }),
+      g ? h("button", { type: "button", onclick: () => go({ type: "game", id: g.id }) }, gameArt(g, "mini"), g.name)
+        : h("span", { text: "No game" }));
+    headEl.replaceChildren(crumb,
+      h("div", { class: "col-head" },
+        tile(col, "lg"),
+        h("div", { class: "main" },
+          h("h2", { text: col.name || "Untitled" }),
+          h("p", { class: "desc" + (col.description ? "" : " none"), text: col.description || "No description." }),
+          h("div", { class: "meta", text: `${plural(n, "link")} · created ${fmtDate(col.createdAt)}` })),
+        h("div", { class: "acts" }, h("button", { class: "btn", type: "button", onclick: () => openDialog(col.id) }, "Edit"), del)));
   }
 
   function sortedLinks(col) {
@@ -787,11 +1056,22 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     listEl.replaceChildren(...links.map((l) => linkRow(col, l)));
   }
 
+  function moveOptions(excludeId) {
+    const out = [];
+    for (const g of sortedGames()) {
+      const cols = colsOf(g.id).filter((c) => c.id !== excludeId);
+      if (cols.length) out.push(h("optgroup", { label: g.name }, cols.map((c) => h("option", { value: c.id }, c.name || "Untitled"))));
+    }
+    const loose = colsOf(NO_GAME).filter((c) => c.id !== excludeId);
+    if (loose.length) out.push(h("optgroup", { label: "No game" }, loose.map((c) => h("option", { value: c.id }, c.name || "Untitled"))));
+    return out;
+  }
+
   function linkRow(col, l) {
     const host = siteOf(l.url);
-    const others = state.collections.filter((c) => c.id !== col.id);
-    const move = others.length ? h("select", { "aria-label": "Move to another collection", onchange: (ev) => { if (ev.target.value) moveLink(col.id, ev.target.value, l.id); } },
-      h("option", { value: "" }, "Move to…"), ...others.map((o) => h("option", { value: o.id }, o.name || "Untitled"))) : null;
+    const opts = state.collections.length > 1 ? moveOptions(col.id) : [];
+    const move = opts.length ? h("select", { "aria-label": "Move to another collection", onchange: (ev) => { if (ev.target.value) moveLink(col.id, ev.target.value, l.id); } },
+      h("option", { value: "" }, "Move to…"), ...opts) : null;
     return h("li", { class: "link" },
       h("div", { style: "min-width:0;display:grid;gap:2px" },
         h("div", { class: "line1" },
@@ -860,21 +1140,43 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     const i = state.collections.findIndex((x) => x.id === id);
     if (i < 0) return;
     const removed = state.collections[i];
+    const g = gameOf(removed);
     state.collections.splice(i, 1);
     state.deleteArmed = false; panelBuiltFor = null;
-    state.activeId = state.collections[0] ? state.collections[0].id : null;
-    render();
+    go(g ? { type: "game", id: g.id } : { type: "home" });
     markDirty(`Delete collection ${removed.name}`);
     toast(`Deleted “${removed.name}”`, () => {
       state.collections.splice(Math.min(i, state.collections.length), 0, removed);
       markDirty(`Restore collection ${removed.name}`);
-      setActive(removed.id);
+      go({ type: "col", id: removed.id });
+    });
+  }
+
+  function deleteGame(id) {
+    const i = state.games.findIndex((g) => g.id === id);
+    if (i < 0) return;
+    const g = state.games[i];
+    const cols = colsOf(id);
+    state.games.splice(i, 1);
+    for (const c of cols) c.gameId = null;
+    state.gameDeleteArmed = false;
+    go({ type: "home" });
+    markDirty(`Delete game ${g.name}`);
+    let undone = false;
+    // Keep the picture file until the undo window closes.
+    setTimeout(() => { if (!undone) deleteImage(g.image, g.name); }, 7000);
+    toast(cols.length ? `Deleted “${g.name}”. Its collections moved to No game.` : `Deleted “${g.name}”`, () => {
+      undone = true;
+      state.games.push(g);
+      for (const c of cols) if (getCol(c.id)) getCol(c.id).gameId = g.id;
+      markDirty(`Restore game ${g.name}`);
+      go({ type: "game", id: g.id });
     });
   }
 
   /* ===== collection dialog ===== */
   const dlg = $("colDialog");
-  let afterCreate = null;
+  let afterCreate = null, prevGameValue = "";
   COLORS.forEach((c) => {
     const span = h("span"); span.style.setProperty("--c", `var(--c-${c})`);
     $("fColors").append(h("label", { class: "sw", title: c[0].toUpperCase() + c.slice(1) },
@@ -893,6 +1195,18 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     try { state.dialogIcon = cleanSvg(text); } catch (e) { $("fIconErr").textContent = e.message; $("fIconErr").hidden = false; }
     updatePreview();
   }
+  function fillGameSelect(selected) {
+    const sel = $("fGame");
+    sel.replaceChildren(h("option", { value: "" }, "No game"), ...sortedGames().map((g) => h("option", { value: g.id }, g.name)), h("option", { value: "__new" }, "+ New game…"));
+    sel.value = selected && getGame(selected) ? selected : "";
+    prevGameValue = sel.value;
+  }
+  $("fGame").addEventListener("change", () => {
+    const sel = $("fGame");
+    if (sel.value !== "__new") { prevGameValue = sel.value; return; }
+    sel.value = prevGameValue;
+    openGameDialog(null, { afterCreate: (gid) => fillGameSelect(gid) });
+  });
   function openDialog(colId, opts) {
     const c = colId ? getCol(colId) : null;
     afterCreate = (opts && opts.afterCreate) || null;
@@ -903,6 +1217,8 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     $("fDesc").value = c ? c.description || "" : "";
     $("fIconSvg").value = "";
     state.dialogIcon = c ? c.iconSvg || "" : "";
+    const presetGame = c ? c.gameId : (opts && opts.gameId) || (state.view.type === "game" ? state.view.id : (state.view.type === "col" ? (getCol(state.view.id) || {}).gameId : null));
+    fillGameSelect(presetGame);
     $("fColor-" + (c && COLORS.includes(c.color) ? c.color : COLORS[state.collections.length % COLORS.length])).checked = true;
     $("fErr").hidden = true; $("fIconErr").hidden = true;
     updatePreview();
@@ -925,7 +1241,8 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     ev.preventDefault();
     const name = $("fName").value.trim();
     if (!name) { $("fErr").textContent = "Give the collection a name."; $("fErr").hidden = false; return; }
-    const body = { name, description: $("fDesc").value.trim(), iconSvg: state.dialogIcon || "", color: currentColor() };
+    const gv = $("fGame").value;
+    const body = { name, gameId: gv && gv !== "__new" ? gv : null, description: $("fDesc").value.trim(), iconSvg: state.dialogIcon || "", color: currentColor() };
     if (state.dialogMode === "new") {
       const now = Date.now();
       const col = { id: newId(), ...body, links: [], createdAt: now, updatedAt: now };
@@ -933,7 +1250,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       dlg.close();
       markDirty(`Create collection ${name}`);
       const cb = afterCreate; afterCreate = null;
-      if (cb) cb(col.id); else { setActive(col.id); toast("Collection created"); }
+      if (cb) cb(col.id); else { go({ type: "col", id: col.id }); toast("Collection created"); }
     } else {
       const c = getCol(state.dialogMode);
       dlg.close();
@@ -945,6 +1262,79 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     }
   });
   $("newColBtn").addEventListener("click", () => openDialog(null));
+
+  /* ===== game dialog ===== */
+  const gdlg = $("gameDialog");
+  let gameMode = null, gameAfterCreate = null, pendingPic = null, picRemoved = false, previewUrl = null;
+  function setGamePreview() {
+    const p = $("gPreview");
+    const name = $("gName").value;
+    p.replaceChildren(h("span", { class: "art-letter", text: initial(name) }));
+    if (pendingPic) { if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = URL.createObjectURL(pendingPic); p.append(h("img", { src: previewUrl, alt: "" })); }
+    else if (!picRemoved && gameMode !== "new") {
+      const g = getGame(gameMode);
+      if (g && g.image) imageURL(g.image.path).then((u) => { if (u && !pendingPic && !picRemoved) p.append(h("img", { src: u, alt: "" })); });
+    }
+  }
+  function openGameDialog(gameId, opts) {
+    const g = gameId ? getGame(gameId) : null;
+    gameMode = gameId || "new";
+    gameAfterCreate = (opts && opts.afterCreate) || null;
+    pendingPic = null; picRemoved = false;
+    $("gTitle").textContent = g ? "Edit game" : "New game";
+    $("gSave").textContent = g ? "Save changes" : "Add game";
+    $("gSave").disabled = false;
+    $("gName").value = g ? g.name : "";
+    $("gErr").hidden = true; $("gPicErr").hidden = true;
+    setGamePreview();
+    gdlg.showModal();
+    $("gName").focus();
+  }
+  $("gName").addEventListener("input", () => { const l = $("gPreview").querySelector(".art-letter"); if (l) l.textContent = initial($("gName").value); });
+  $("gCancel").addEventListener("click", () => gdlg.close());
+  $("gClear").addEventListener("click", () => { pendingPic = null; picRemoved = true; setGamePreview(); });
+  $("gFile").addEventListener("change", async (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (!f) return;
+    $("gPicErr").hidden = true;
+    try { pendingPic = await resizeImage(f); picRemoved = false; setGamePreview(); }
+    catch (e) { $("gPicErr").textContent = e.message; $("gPicErr").hidden = false; }
+  });
+  $("newGameBtn").addEventListener("click", () => openGameDialog(null));
+  $("gameForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const name = $("gName").value.trim();
+    if (!name) { $("gErr").textContent = "Give the game a name."; $("gErr").hidden = false; return; }
+    const existing = gameMode !== "new" ? getGame(gameMode) : null;
+    const gid = existing ? existing.id : newId();
+    let image = existing ? existing.image : null;
+    const oldImage = image;
+    const btn = $("gSave");
+    if (pendingPic) {
+      btn.disabled = true; btn.textContent = "Uploading picture…";
+      try { image = await uploadImage(gid, pendingPic, name); }
+      catch (e) { $("gErr").textContent = e.message; $("gErr").hidden = false; btn.disabled = false; btn.textContent = existing ? "Save changes" : "Add game"; return; }
+    } else if (picRemoved) image = null;
+    gdlg.close();
+    if (existing) {
+      existing.name = name; existing.image = image;
+      markDirty(`Edit game ${name}`);
+      render();
+      toast("Game saved");
+    } else {
+      state.games.push({ id: gid, name, image, createdAt: Date.now() });
+      markDirty(`Add game ${name}`);
+      const cb = gameAfterCreate; gameAfterCreate = null;
+      if (cb) { render(); cb(gid); } else { go({ type: "game", id: gid }); toast("Game added"); }
+    }
+    if (oldImage && oldImage.path !== (image && image.path)) afterSaveQueue(() => deleteImage(oldImage, name));
+  });
+  // Run cleanup once the next collections.json save succeeds.
+  function afterSaveQueue(fn) {
+    const prev = afterSave;
+    afterSave = () => { if (prev) prev(); fn(); };
+  }
 
   /* ===== settings ===== */
   const setDlg = $("setDialog");
@@ -961,7 +1351,8 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   $("forgetBtn").addEventListener("click", async () => {
     if (dirty || saving) await flush();
     store.del("ll.token");
-    cfg.token = ""; state.connected = false; state.collections = []; sha = null;
+    cfg.token = ""; state.connected = false; state.collections = []; state.games = []; sha = null;
+    imgCache.clear();
     setDlg.close();
     renderGate();
     toast("Token removed from this browser");
@@ -988,6 +1379,19 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
       try { parsed = JSON.parse(String(r.result)); } catch (e) { toast("That file isn't a Loot Ledger backup."); return; }
       const cols = Array.isArray(parsed && parsed.collections) ? parsed.collections : null;
       if (!cols) { toast("That file isn't a Loot Ledger backup."); return; }
+      // Games: match by name to existing ones, otherwise add (pictures aren't in backups).
+      const gameMap = new Map();
+      let gAdded = 0;
+      for (const raw of Array.isArray(parsed.games) ? parsed.games : []) {
+        if (!raw || typeof raw.name !== "string" || !raw.id) continue;
+        let g = state.games.find((x) => x.name.toLowerCase() === raw.name.toLowerCase());
+        if (!g) {
+          const keepPic = raw.image && typeof raw.image.path === "string" ? { path: raw.image.path, sha: String(raw.image.sha || "") } : null;
+          g = { id: newId(), name: raw.name.slice(0, 80), image: keepPic, createdAt: Number(raw.createdAt) || Date.now() };
+          state.games.push(g); gAdded++;
+        }
+        gameMap.set(String(raw.id), g.id);
+      }
       let n = 0, firstId = null;
       for (const raw of cols) {
         if (!raw || typeof raw.name !== "string") continue;
@@ -998,17 +1402,18 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
           return { id: newId(), url, title: String(l.title || guessTitle(url)).slice(0, 200), note: String(l.note || "").slice(0, 600), addedAt: Number(l.addedAt) || Date.now() };
         }).filter(Boolean);
         const now = Date.now();
-        const col = { id: newId(), name: raw.name.slice(0, 60), description: String(raw.description || "").slice(0, 500), iconSvg: icon,
+        const col = { id: newId(), name: raw.name.slice(0, 60), gameId: raw.gameId ? gameMap.get(String(raw.gameId)) || null : null,
+          description: String(raw.description || "").slice(0, 500), iconSvg: icon,
           color: COLORS.includes(raw.color) ? raw.color : "slate", links, createdAt: Number(raw.createdAt) || now, updatedAt: now };
         state.collections.push(col);
         firstId = firstId || col.id;
         n++;
       }
-      if (!n) { toast("No collections found in that file."); return; }
+      if (!n && !gAdded) { toast("No collections found in that file."); return; }
       setDlg.close();
       markDirty(`Import ${plural(n, "collection")}`);
-      setActive(firstId);
-      toast(`Imported ${plural(n, "collection")}`);
+      go(firstId ? { type: "col", id: firstId } : { type: "home" });
+      toast(`Imported ${plural(n, "collection")}${gAdded ? ` and ${plural(gAdded, "game")}` : ""}`);
     };
     r.readAsText(f);
   });
@@ -1017,7 +1422,7 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
   document.addEventListener("paste", (ev) => {
     const t = ev.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-    if (dlg.open || setDlg.open) return;
+    if (dlg.open || setDlg.open || gdlg.open) return;
     const text = (ev.clipboardData && ev.clipboardData.getData("text")) || "";
     const url = normUrl(text.trim().split(/\s+/)[0]);
     const urlIn = $("addUrl");
@@ -1035,7 +1440,6 @@ dialog::backdrop { background: rgba(10, 14, 12, .45); }
     try { await connect(); }
     catch (e) {
       if (e.kind === "auth" || e.kind === "access") { store.del("ll.token"); cfg.token = ""; renderGate(e.message); return; }
-      // Network or GitHub hiccup: keep the saved token and offer a retry.
       $("gate").replaceChildren(h("div", { class: "card state" },
         h("h2", { text: "Couldn't load your collections" }),
         h("p", { text: e.message }),
